@@ -1,0 +1,10 @@
+# dev artifacts
+.tools/
+
+# python
+__pycache__/
+*.pyc
+
+# os
+Thumbs.db
+Desktop.ini
