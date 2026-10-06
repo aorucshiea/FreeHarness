@@ -1,4 +1,4 @@
-# WebHarness — 让免费网页 AI 变成能操作你电脑的 Agent
+# FreeHarness — 让免费网页 AI 变成能操作你电脑的 Agent
 
 网页版 AI（ChatGPT / Claude / Kimi / DeepSeek / 通义 / 智谱 / 元宝 / 豆包 / Gemini）免费但没有本地执行能力。
 WebHarness 把 Agent 的 harness 搬到网页上：**扩展捕捉网页 AI 输出的工具调用 → 在你电脑上执行 → 结果自动发回网页**，形成完整的 Agent 循环。
