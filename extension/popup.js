@@ -150,15 +150,32 @@ chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
         if (typeof resp.rounds === "number") ri.textContent = "已执行 " + resp.rounds + " 轮";
         ri.title = "适配器: " + (resp.adapter || "?");
       }
+      // 页面脚本版本落后于扩展（重载扩展后没刷新页面）→ 提前告知
+      if (resp.ver && resp.ver !== MY_VER) {
+        appendLog("⚠️ 页面脚本 v" + resp.ver + " ≠ 扩展 v" + MY_VER + "，建议刷新本页后再操作");
+      }
     }
   });
 });
 
 // ---- 提示词一键注入（人设可编辑，核心锁定） ----
+const MY_VER = chrome.runtime.getManifest().version; // 用于和页面里的 content script 做版本握手
 const personaEl = $("persona");
 const coreView = $("coreView");
 const corePrompt = (window.WH_PROMPTS && window.WH_PROMPTS.core) || "";
 coreView.textContent = corePrompt || "(prompts.js 未加载，请重新加载扩展)";
+
+function showReloadNeeded(msg) {
+  $("injectHint").textContent = msg || "需刷新本页";
+  const b = $("reloadTab");
+  if (b) b.style.display = "";
+}
+
+$("reloadTab").addEventListener("click", () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (tabs && tabs.length) chrome.tabs.reload(tabs[0].id);
+  });
+});
 
 chrome.storage.local.get({ h_persona: "" }, (o) => { personaEl.value = o.h_persona; });
 personaEl.addEventListener("input", () => {
@@ -172,8 +189,14 @@ $("injectPrompt").addEventListener("click", () => {
     const tabId = tabs[0].id;
     chrome.tabs.sendMessage(tabId, { type: "harness-ping" }, (resp) => {
       if (chrome.runtime.lastError || !resp) {
-        hint.textContent = "当前页未运行";
-        appendLog("注入失败：当前页 WebHarness 未运行（请在 AI 站点页面使用，或刷新页面后重试）");
+        appendLog("注入失败：当前页 WebHarness 未运行（请在 AI 站点页面使用）");
+        showReloadNeeded("需刷新本页");
+        return;
+      }
+      // 版本握手：页面里的 content script 是扩展重载前注入的旧版时，它不认识新指令
+      if (resp.ver && resp.ver !== MY_VER) {
+        appendLog("注入失败：页面脚本 v" + resp.ver + " ≠ 扩展 v" + MY_VER + "，请先刷新页面");
+        showReloadNeeded("扩展已更新");
         return;
       }
       const persona = personaEl.value.trim();
@@ -185,13 +208,19 @@ $("injectPrompt").addEventListener("click", () => {
       const text = (persona ? persona + "\n\n" : "") + corePrompt;
       hint.textContent = "注入中…";
       chrome.tabs.sendMessage(tabId, { type: "harness-inject-prompt", text }, (r) => {
-        if (chrome.runtime.lastError || !r || !r.ok) {
-          hint.textContent = "失败";
-          appendLog("提示词注入失败：填字或发送未成功，建议刷新页面（Ctrl+F5）后重试");
-        } else {
-          hint.textContent = "已发送";
-          appendLog("已注入提示词（" + (resp.adapter || "?") + "，" + (persona ? "含人设" : "仅核心") + "，共 " + text.length + " 字）");
+        if (chrome.runtime.lastError || !r) {
+          // 旧版页面脚本没有这个指令，回调收不到有效响应
+          appendLog("注入失败：页面脚本无响应（版本过旧），请刷新页面后重试");
+          showReloadNeeded("需刷新本页");
+          return;
         }
+        if (!r.ok) {
+          appendLog("注入失败：" + (r.reason || "填字或发送未成功") + "。建议刷新页面后重试");
+          showReloadNeeded("发送失败");
+          return;
+        }
+        hint.textContent = "已发送";
+        appendLog("已注入提示词（" + (resp.adapter || "?") + "，" + (persona ? "含人设" : "仅核心") + "，共 " + text.length + " 字）");
       });
     });
   });

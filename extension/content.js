@@ -41,7 +41,7 @@
   // 响应 popup 的存活探测（用于判断当前页是否已注入）
   chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     if (!msg) return;
-    if (msg.type === "harness-ping") { sendResponse({ active: true, adapter: A.name, rounds: rounds }); return true; }
+    if (msg.type === "harness-ping") { sendResponse({ active: true, adapter: A.name, rounds: rounds, ver: (chrome.runtime.getManifest ? chrome.runtime.getManifest().version : "") }); return true; }
     if (msg.type === "harness-reset") {
       rounds = 0;
       lastCallFp = "";
@@ -63,9 +63,15 @@
         var text = String(msg.text || "").trim();
         if (!text) { sendResponse({ ok: false, error: "提示词为空" }); return; }
         var ok = false;
-        try { ok = await typeAndSend(text); } catch (e) { log("提示词注入异常: " + e); }
+        var reason = "";
+        try {
+          ok = await typeAndSend(text);
+          if (!ok) reason = "找不到输入框（站点未就绪或 DOM 改版）";
+        } catch (e) {
+          reason = String(e);
+        }
         if (ok) { skipNextUntil = Date.now() + 120000; log("提示词已发送，120 秒内忽略 AI 的确认回复（防示例调用被误执行）"); }
-        sendResponse({ ok: !!ok });
+        sendResponse({ ok: !!ok, reason: reason });
       })();
       return true;
     }

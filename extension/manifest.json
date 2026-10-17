@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WebHarness — 网页AI本地工具执行器",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "description": "捕捉网页AI输出的工具调用，在你电脑上执行，并把结果自动发回，让免费网页AI变成能干活的Agent。",
   "permissions": ["storage", "scripting", "tabs", "nativeMessaging"],
   "host_permissions": ["http://127.0.0.1:8765/*"],
