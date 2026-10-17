@@ -141,3 +141,46 @@ chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
     }
   });
 });
+
+// ---- 提示词一键注入（人设可编辑，核心锁定） ----
+const personaEl = $("persona");
+const coreView = $("coreView");
+const corePrompt = (window.WH_PROMPTS && window.WH_PROMPTS.core) || "";
+coreView.textContent = corePrompt || "(prompts.js 未加载，请重新加载扩展)";
+
+chrome.storage.local.get({ h_persona: "" }, (o) => { personaEl.value = o.h_persona; });
+personaEl.addEventListener("input", () => {
+  chrome.storage.local.set({ h_persona: personaEl.value });
+});
+
+$("injectPrompt").addEventListener("click", () => {
+  const hint = $("injectHint");
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs || !tabs.length) return;
+    const tabId = tabs[0].id;
+    chrome.tabs.sendMessage(tabId, { type: "harness-ping" }, (resp) => {
+      if (chrome.runtime.lastError || !resp) {
+        hint.textContent = "当前页未运行";
+        appendLog("注入失败：当前页 WebHarness 未运行（请在 AI 站点页面使用，或刷新页面后重试）");
+        return;
+      }
+      const persona = personaEl.value.trim();
+      if (!corePrompt) {
+        hint.textContent = "核心提示词缺失";
+        appendLog("注入失败：prompts.js 未加载，请重新加载扩展");
+        return;
+      }
+      const text = (persona ? persona + "\n\n" : "") + corePrompt;
+      hint.textContent = "注入中…";
+      chrome.tabs.sendMessage(tabId, { type: "harness-inject-prompt", text }, (r) => {
+        if (chrome.runtime.lastError || !r || !r.ok) {
+          hint.textContent = "失败";
+          appendLog("提示词注入失败：填字或发送未成功，建议刷新页面（Ctrl+F5）后重试");
+        } else {
+          hint.textContent = "已发送";
+          appendLog("已注入提示词（" + (resp.adapter || "?") + "，" + (persona ? "含人设" : "仅核心") + "，共 " + text.length + " 字）");
+        }
+      });
+    });
+  });
+});

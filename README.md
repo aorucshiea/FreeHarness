@@ -22,15 +22,21 @@ WebHarness 把 Agent 的 harness 搬到网页上：**扩展捕捉网页 AI 输�
 webharness/
 ├── server/
 │   ├── harness_server.py    本地执行服务（零依赖，Python 3.8+）
-│   └── start_server.bat     双击启动
+│   ├── start_server.bat     双击启动
+│   └── launcher/            点扩展图标自动拉起服务（Native Messaging）
+│       ├── native_host.py   stdio host：服务没跑就启动 start_server.bat
+│       ├── install_host.py  一次性注册（写 HKCU 注册表）
+│       └── com.webharness.launcher.json  host manifest（绑定扩展 ID）
 ├── extension/               浏览器扩展（Edge / Chrome 通用）
 │   ├── manifest.json
 │   ├── protocol.js          工具调用解析（纯函数）
 │   ├── adapters.js          各网站 DOM 适配器
+│   ├── prompts.js           核心提示词常量（由 build_prompts.py 生成）
 │   ├── content.js           主循环：监听→执行→发回
 │   ├── background.js        转发到本地服务
-│   └── popup.html/js        控制台：开关 / 状态 / 日志
-├── PROMPT_TEMPLATE.md        给网页 AI 的提示词模板（必读）
+│   └── popup.html/js        控制台：开关 / 状态 / 提示词注入 / 日志
+├── build_prompts.py          从 PROMPT_TEMPLATE.md 生成 prompts.js
+├── PROMPT_TEMPLATE.md        提示词源文件（核心提示词锁定于此）
 └── README.md                本文件
 ```
 
@@ -69,10 +75,13 @@ python server\launcher\install_host.py
 4. 选择本项目的 `extension` 文件夹（不是 webharness 根目录！）
 5. 工具栏出现 WebHarness 图标即成功
 
-### 第 3 步：使用
+### 第 3 步：使用（提示词一键注入）
 
-1. 打开 `PROMPT_TEMPLATE.md`，复制分割线内的全部内容
-2. 新开一个网页 AI 对话，把模板作为第一条消息发出，等 AI 回复"就绪"
+1. 打开任意支持的 AI 站点，新开一个对话
+2. 点扩展图标 → 「提示词」区块（人设可选）→ 点 **注入到当前对话**
+3. 等 AI 回复"就绪/明白"后直接下达任务，例如"看看我桌面上有什么文件"
+
+不喜欢自动注入？仍可打开 `PROMPT_TEMPLATE.md` 手动复制粘贴，两者内容完全一致。
 3. 直接下达任务，例如：
    - "看看我桌面有什么文件"
    - "把 D:\notes 里所有 txt 文件合并成一个 notes_all.txt"
@@ -100,6 +109,26 @@ python server\launcher\install_host.py
 | key_press / type_text | 按键组合 / 整段文字输入（中文友好，内部经剪贴板粘贴） |
 
 **view_image 用法**（AI 视角）：先 `screenshot` 存图 → 再 `view_image` 带 `prompt` 参数（看图后要做什么）→ 图片自动作为附件发出，AI 用视觉能力直接查看截图内容。
+
+## 提示词一键注入
+
+不用再复制粘贴模板：点扩展图标，在「提示词」区块里：
+
+- **小助手人设（可编辑）**：定义语气/风格，例如"你是简洁高效的中文助手"。存在本地，随时可改。
+- **核心提示词（锁定）**：工具协议与格式规则，只读展示。改坏其中任何一条，AI 就可能不再输出 `[TOOL_CALL]`、所有工具失效，因此不可编辑。
+- 点 **「注入到当前对话」**：自动填入并发送"人设 + 核心提示词"。
+
+核心提示词的源文件是 `PROMPT_TEMPLATE.md`（两个 `---` 之间的正文）。修改模板后跑一次
+`python build_prompts.py` 重新生成 `extension/prompts.js`，再重载扩展即可。
+
+## 失败提示
+
+工具执行失败时页面右上角会弹出红色浮层（同一类 30 秒内不重复），直接告诉你该怎么办：
+
+- **扩展与本地服务通信异常** → 刷新本页（Ctrl+F5）或到 edge://extensions 重新加载扩展
+- **结果自动发送失败**（站点接口改版）→ 刷新页面后重试；结果已自动复制到剪贴板，可手动粘贴
+
+另外在浏览器 DevTools 控制台搜 `[WebHarness]` 可看到完整执行日志。
 
 ## 安全设计
 

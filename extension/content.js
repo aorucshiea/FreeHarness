@@ -57,6 +57,18 @@
       sendResponse({ ok: true, adapter: A.name });
       return true;
     }
+    if (msg.type === "harness-inject-prompt") {
+      // popup 的一键注入提示词：填入输入框并发送（人设+核心已由 popup 拼好）
+      (async function () {
+        var text = String(msg.text || "").trim();
+        if (!text) { sendResponse({ ok: false, error: "提示词为空" }); return; }
+        var ok = false;
+        try { ok = await typeAndSend(text); } catch (e) { log("提示词注入异常: " + e); }
+        if (ok) { skipNextUntil = Date.now() + 120000; log("提示词已发送，120 秒内忽略 AI 的确认回复（防示例调用被误执行）"); }
+        sendResponse({ ok: !!ok });
+      })();
+      return true;
+    }
   });
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -70,6 +82,28 @@
         while (arr.length > 120) arr.shift();
         chrome.storage.local.set({ log: arr });
       });
+    } catch (e) {}
+  }
+
+  // 页面内浮层提示：工具链路失败时直接告诉用户怎么办（不用开 F12 看日志）
+  var toastEl = null;
+  var lastToast = { text: "", at: 0 };
+  function showToast(text, ms) {
+    try {
+      var nowT = Date.now();
+      if (text === lastToast.text && nowT - lastToast.at < 30000) return; // 30 秒内同类提示不重复刷屏
+      lastToast = { text: text, at: nowT };
+      if (!toastEl) {
+        toastEl = document.createElement("div");
+        toastEl.style.cssText = "position:fixed;top:16px;right:16px;z-index:2147483647;max-width:380px;" +
+          "background:#7f1d1d;color:#fff;padding:10px 14px;border-radius:8px;font:13px/1.6 system-ui,sans-serif;" +
+          "box-shadow:0 4px 16px rgba(0,0,0,.3);opacity:0;transition:opacity .25s;white-space:pre-wrap;";
+        (document.body || document.documentElement).appendChild(toastEl);
+      }
+      toastEl.textContent = text;
+      toastEl.style.opacity = "1";
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(function () { if (toastEl) toastEl.style.opacity = "0"; }, ms || 6000);
     } catch (e) {}
   }
 
@@ -126,6 +160,7 @@
   var IMG_OK_TEXT = "[图片已作为附件随消息上传，请直接查看附图]";
   var IMG_FAIL_TEXT = "[图片上传失败：站点附件通道不可用，本条消息没有附图。请勿编造画面，可告知用户或改用文字描述]";
   var genSince = 0; // "生成中"起始时间：某些站点有常驻 stop 类按钮，会让 isGenerating 永远为真、检查永久静默
+  var skipNextUntil = 0; // 注入提示词后的忽略窗口（截止时间戳）：忽略 AI 的"就绪"确认回复，防模板示例调用被执行
   async function check() {
     if (busy) return;
     if (!(await setting("enabled", true))) return;
@@ -146,6 +181,17 @@
       if (document.documentElement.dataset.whLast !== head) document.documentElement.dataset.whLast = head;
     } catch (e) {}
     if (!text || text.length < 10) return;
+
+    // 刚注入提示词：AI 的这条"就绪"确认回复不当任务处理（模板里的示例 [TOOL_CALL] 若被复述不能执行）
+    if (skipNextUntil) {
+      if (Date.now() > skipNextUntil) {
+        skipNextUntil = 0; // 窗口过期（AI 迟迟没回确认），恢复正常处理
+      } else {
+        var fp0 = "m" + fingerprint(text.slice(0, 4000));
+        if (!processed.has(fp0)) { markProcessed(fp0); skipNextUntil = 0; return; }
+        return; // 文本还未变化（AI 尚未回复确认），继续等待
+      }
+    }
 
     var calls = extractCalls(text);
     if (!calls.length) { rounds = 0; return; } // 该消息无调用：新任务，重置轮次
@@ -204,6 +250,14 @@
       results = localErrors.concat(results);
       if (!results.length) return;
 
+      // 通信类失败（扩展↔本地服务）→ 页面内直接提示用户该干什么，不只是把错误回给 AI
+      var infraFail = results.some(function (r) {
+        return r && !r.ok && /后台|超时|无响应|无法连接|通信/.test(String(r.error || ""));
+      });
+      if (infraFail) {
+        showToast("⚠️ 工具执行失败：扩展与本地服务通信异常。\n建议：刷新本页（Ctrl+F5），或到 edge://extensions 重新加载扩展。", 9000);
+      }
+
       // 图片结果：base64 只走附件通道，文字消息里替换为简短说明（11MB 文本不能进输入框）
       var images = [];
       var displayResults = (results || []).map(function (r) {
@@ -241,6 +295,7 @@
       }
       log(sent ? "已自动发送工具结果（第 " + rounds + " 轮）" : "自动发送失败，请手动发送（结果见控制台/剪贴板）");
       if (!sent) {
+        showToast("⚠️ 结果自动发送失败：站点输入/发送接口可能已改版。\n建议：刷新本页（Ctrl+F5）或重新加载扩展。结果已复制到剪贴板，可手动粘贴。", 9000);
         try { await navigator.clipboard.writeText(payload); } catch (e) {}
         console.log("[WebHarness] 完整结果:", payload);
       }
