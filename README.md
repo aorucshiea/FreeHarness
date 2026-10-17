@@ -1,5 +1,12 @@
 # FreeHarness — 让免费网页 AI 变成能操作你电脑的 Agent
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)]()
+[![Manifest V3](https://img.shields.io/badge/extension-Manifest%20V3-green)]()
+
+> **零 API 成本**：不用买 API key、不用订阅，直接用你**免费网页版 AI** 的额度，同样能让 AI 在你电脑上执行命令、读写文件、截图、点鼠标。
+> 对比 Claude Code / Cursor（$20/月起）：能力相近，成本为 0。
+
 网页版 AI（ DeepSeek / 通义 / 智谱 / 元宝 / 豆包 / Gemini/ChatGPT / Claude / Kimi ）免费但没有本地执行能力。
 WebHarness 把 Agent 的 harness 搬到网页上：**扩展捕捉网页 AI 输出的工具调用 → 在你电脑上执行 → 结果自动发回网页**，形成完整的 Agent 循环。
 
