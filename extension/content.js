@@ -290,7 +290,7 @@
         return;
       }
 
-      var maxRounds = await setting("maxRounds", 20);
+      var maxRounds = await setting("maxRounds", 100);
       // 距上次执行超过 90 秒 → 视为用户重新下达的新任务，轮次归零。
       // 否则连续测试/多步任务会一直累加到上限，后续调用被静默挡掉（表现为"AI 输出调用但界面无反应"）。
       if (lastExecAt && Date.now() - lastExecAt > 90000) rounds = 0;

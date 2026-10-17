@@ -2,7 +2,7 @@ const API = "http://127.0.0.1:8765";
 const $ = (id) => document.getElementById(id);
 
 const KEY_MAP = { enabled: "h_enabled", autoSend: "h_autoSend", maxRounds: "h_maxRounds" };
-const DEFAULTS = { h_enabled: true, h_autoSend: true, h_maxRounds: 20 };
+const DEFAULTS = { h_enabled: true, h_autoSend: true, h_maxRounds: 100 };
 
 function loadSettings() {
   chrome.storage.local.get(DEFAULTS, (o) => {
@@ -20,8 +20,8 @@ function bindCheck(id) {
 
 $("maxRounds").addEventListener("change", () => {
   let v = parseInt($("maxRounds").value, 10);
-  if (!v || v < 1) v = 20;
-  if (v > 100) v = 100;
+  if (!v || v < 1) v = 100;
+  if (v > 1000) v = 1000;
   $("maxRounds").value = v;
   chrome.storage.local.set({ h_maxRounds: v });
 });
