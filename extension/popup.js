@@ -82,11 +82,15 @@ async function ensureService() {
 async function ping() {
   const j = await ensureService();
   if (j) {
+    const tools = j.tools || [];
     $("dot").className = "dot on";
-    $("statusText").textContent = "本地服务正常 · 工具: " + (j.tools || []).join(", ");
+    // 状态行只显示数量（18 个工具名全列会把弹窗撑乱），完整列表进 title 提示
+    $("statusText").textContent = "服务正常 · " + tools.length + " 个工具就绪";
+    $("statusText").title = tools.join(", ");
   } else {
     $("dot").className = "dot off";
     $("statusText").textContent = "本地服务未启动";
+    $("statusText").title = "";
   }
 }
 
@@ -105,6 +109,9 @@ function renderLog() {
       div.appendChild(document.createTextNode(e.msg));
       el.appendChild(div);
     }
+    // 折叠状态下 summary 也带信息量
+    const sum = $("logSummary");
+    if (sum) sum.textContent = "执行日志" + (arr.length ? "（" + arr.length + " 条）" : "（空）");
   });
 }
 
@@ -138,6 +145,11 @@ chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
       });
     } else {
       appendLog("当前页 WebHarness 运行中（适配: " + resp.adapter + "）");
+      var ri = $("roundsInfo");
+      if (ri) {
+        if (typeof resp.rounds === "number") ri.textContent = "已执行 " + resp.rounds + " 轮";
+        ri.title = "适配器: " + (resp.adapter || "?");
+      }
     }
   });
 });

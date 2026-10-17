@@ -41,7 +41,7 @@
   // 响应 popup 的存活探测（用于判断当前页是否已注入）
   chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
     if (!msg) return;
-    if (msg.type === "harness-ping") { sendResponse({ active: true, adapter: A.name }); return true; }
+    if (msg.type === "harness-ping") { sendResponse({ active: true, adapter: A.name, rounds: rounds }); return true; }
     if (msg.type === "harness-reset") {
       rounds = 0;
       lastCallFp = "";

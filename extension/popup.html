@@ -3,49 +3,86 @@
 <head>
 <meta charset="utf-8">
 <style>
-  body { width: 360px; margin: 0; padding: 12px; font: 13px/1.6 system-ui, "Segoe UI", sans-serif; color: #222; }
-  h3 { margin: 0 0 8px; font-size: 15px; }
-  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
-  .status { font-size: 12px; }
-  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #bbb; margin-right: 4px; vertical-align: middle; }
-  .dot.on { background: #3B6D11; }
-  .dot.off { background: #A32D2D; }
-  input[type="checkbox"] { accent-color: #185FA5; }
-  input[type="number"] { width: 56px; }
-  button { padding: 3px 10px; font-size: 12px; cursor: pointer; }
-  .sect { margin-top: 10px; padding-top: 8px; border-top: 1px solid #ddd; }
-  .sect-title { font-weight: 600; margin-bottom: 6px; }
-  textarea { width: 100%; box-sizing: border-box; font: 12px/1.5 system-ui; border: 1px solid #ccc; border-radius: 4px; padding: 6px; resize: vertical; color: #222; background: #fff; }
-  details { margin: 6px 0; }
-  details summary { cursor: pointer; }
-  details pre { max-height: 140px; overflow: auto; background: #f6f6f6; padding: 6px; font-size: 11px; white-space: pre-wrap; word-break: break-all; border-radius: 4px; color: #333; }
-  #injectHint { flex: 1; text-align: right; }
-  #log { margin-top: 8px; border-top: 1px solid #ddd; padding-top: 8px; max-height: 150px; overflow-y: auto; font-size: 12px; color: #444; }
-  #log .e { padding: 2px 0; border-bottom: 1px dashed #eee; word-break: break-all; }
-  #log .t { color: #999; margin-right: 6px; font-variant-numeric: tabular-nums; }
-  .muted { color: #888; font-size: 12px; }
+  :root { --line:#e5e7eb; --muted:#8a8f98; --ok:#3B6D11; --bad:#A32D2D; --brand:#185FA5; }
+  body { width:360px; margin:0; padding:10px 12px 12px; background:#f7f7f8; font:13px/1.55 system-ui,"Segoe UI",sans-serif; color:#222; }
+  h3 { margin:2px 0 8px; font-size:14px; font-weight:700; letter-spacing:.2px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; margin-top:8px; }
+  .card-pad { padding:8px 10px; }
+  .card > h4 { margin:0 0 6px; font-size:11px; font-weight:600; color:var(--muted); letter-spacing:.6px; }
+  .statusbar { display:flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12px; }
+  .statusbar .sp { flex:1; }
+  .dot { width:9px; height:9px; border-radius:50%; background:#c3c7cc; flex:none; }
+  .dot.on { background:var(--ok); }
+  .dot.off { background:var(--bad); }
+  .switchrow { display:flex; gap:16px; }
+  .switchrow label { display:flex; align-items:center; gap:5px; cursor:pointer; }
+  input[type=checkbox] { accent-color:var(--brand); margin:0; }
+  input[type=number] { width:52px; padding:1px 4px; border:1px solid var(--line); border-radius:4px; font:inherit; }
+  button { padding:4px 10px; font-size:12px; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; color:#222; }
+  button.primary { background:var(--brand); border-color:var(--brand); color:#fff; }
+  button:hover { filter:brightness(.97); }
+  textarea { width:100%; box-sizing:border-box; font:12px/1.5 system-ui; border:1px solid var(--line); border-radius:6px; padding:6px; resize:vertical; color:#222; background:#fff; }
+  textarea:focus { outline:none; border-color:var(--brand); }
+  details > summary { cursor:pointer; font-size:12px; color:var(--muted); user-select:none; padding:8px 10px; }
+  details > summary:hover { color:#333; }
+  details[open] > summary { border-bottom:1px dashed var(--line); color:#333; }
+  details .inner { padding:8px 10px; }
+  details pre { max-height:130px; overflow:auto; background:#f6f7f8; padding:6px; font-size:11px; white-space:pre-wrap; word-break:break-all; border-radius:6px; color:#333; margin:6px 0 0; }
+  .injectrow { display:flex; align-items:center; gap:8px; margin-top:6px; }
+  .injectrow .hint { flex:1; text-align:right; font-size:12px; color:var(--muted); }
+  #log { max-height:170px; overflow-y:auto; font-size:12px; color:#444; }
+  #log .e { padding:3px 0; border-bottom:1px dashed #eee; word-break:break-all; }
+  #log .t { color:#aaa; margin-right:6px; font-variant-numeric:tabular-nums; }
+  .muted { color:var(--muted); font-size:12px; }
+  .row { display:flex; align-items:center; gap:8px; }
 </style>
 </head>
 <body>
-  <h3>WebHarness 控制台</h3>
-  <div class="status"><span class="dot" id="dot"></span><span id="statusText">检测本地服务…</span></div>
-  <div class="row"><input type="checkbox" id="enabled"><label for="enabled">启用（总开关）</label></div>
-  <div class="row"><input type="checkbox" id="autoSend"><label for="autoSend">自动发送结果到网页</label></div>
-  <div class="row">轮次上限 <input type="number" id="maxRounds" min="1" max="100"><span class="muted">连续工具调用最大轮数</span></div>
-  <div class="row"><button id="resetRounds">重置轮次计数</button><button id="clear">清空日志</button></div>
+  <h3>WebHarness</h3>
 
-  <div class="sect">
-    <div class="sect-title">提示词（一键注入，无需复制粘贴）</div>
-    <textarea id="persona" rows="3" placeholder="小助手人设（可选）：如「你是一位简洁高效的中文助手，回答尽量短」。留空则只用核心提示词。"></textarea>
-    <details>
-      <summary class="muted">查看核心提示词（⚠️ 已锁定：含工具协议，修改后 AI 可能无法执行任何操作）</summary>
-      <pre id="coreView"></pre>
-    </details>
-    <div class="row"><button id="injectPrompt">注入到当前对话</button><span id="injectHint" class="muted"></span></div>
+  <div class="statusbar">
+    <span class="dot" id="dot"></span>
+    <span id="statusText">检测本地服务…</span>
+    <span class="sp"></span>
+    <span class="muted" id="roundsInfo"></span>
   </div>
 
-  <div id="log"></div>
-  <p class="muted">服务未启动会自动拉起；若工具无响应，刷新页面（Ctrl+F5）或重新加载扩展。</p>
+  <div class="card card-pad">
+    <h4>常用</h4>
+    <div class="switchrow">
+      <label><input type="checkbox" id="enabled">启用</label>
+      <label><input type="checkbox" id="autoSend">自动发送结果</label>
+    </div>
+  </div>
+
+  <div class="card card-pad">
+    <h4>提示词</h4>
+    <textarea id="persona" rows="2" placeholder="小助手人设（可选）：如「简洁高效的中文助手」"></textarea>
+    <details>
+      <summary style="padding:6px 0; color:var(--muted);">核心提示词（已锁定 · 含工具协议，修改会导致无法执行）</summary>
+      <pre id="coreView"></pre>
+    </details>
+    <div class="injectrow">
+      <button class="primary" id="injectPrompt">注入到当前对话</button>
+      <span class="hint" id="injectHint"></span>
+    </div>
+  </div>
+
+  <details class="card">
+    <summary>高级设置</summary>
+    <div class="inner row">
+      轮次上限 <input type="number" id="maxRounds" min="1" max="100">
+      <button id="resetRounds">重置轮次</button>
+      <button id="clear">清空日志</button>
+    </div>
+  </details>
+
+  <details class="card">
+    <summary id="logSummary">执行日志</summary>
+    <div class="inner"><div id="log"></div></div>
+  </details>
+
+  <p class="muted" style="margin:8px 2px 0;">服务未启动会自动拉起；异常时刷新页面（Ctrl+F5）或重新加载扩展。</p>
   <script src="prompts.js"></script>
   <script src="popup.js"></script>
 </body>
