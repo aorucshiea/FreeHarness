@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FreeHarness - 解放网页 AI",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "description": "解放网页 AI：把免费的网页版 AI（DeepSeek/GLM/ChatGPT 等）变成能操作你电脑的 Agent——执行命令、读写文件、截图看图、点鼠标，零 API 成本。",
   "permissions": ["storage", "scripting", "tabs", "nativeMessaging"],
   "host_permissions": ["http://127.0.0.1:8765/*"],

@@ -17,6 +17,7 @@
   var processedOrder = [];    // 指纹插入顺序（超限时按序淘汰，绝不清空当前）
   var busy = false;           // 执行中锁
   var rounds = 0;             // 本次任务连续工具调用轮数
+  var lastExecAt = 0;         // 上次执行工具调用完成的时间戳（用于判断"新任务"并重置轮次）
   var lastCallFp = "";        // 连续相同调用检测
   var repeatCount = 0;
 
@@ -290,8 +291,12 @@
       }
 
       var maxRounds = await setting("maxRounds", 20);
+      // 距上次执行超过 90 秒 → 视为用户重新下达的新任务，轮次归零。
+      // 否则连续测试/多步任务会一直累加到上限，后续调用被静默挡掉（表现为"AI 输出调用但界面无反应"）。
+      if (lastExecAt && Date.now() - lastExecAt > 90000) rounds = 0;
       if (rounds >= maxRounds) {
-        log("已达最大轮次 " + maxRounds + "，已停止。如需继续请重新启用或调大上限。");
+        log("已达最大轮次 " + maxRounds + "，已停止。可在 popup 调大上限或点「重置轮次」继续。");
+        showToast("⚠️ 已达轮次上限（" + maxRounds + " 轮），执行已暂停。\n点扩展图标 → 高级设置：调大「轮次上限」或点「重置轮次」。", 9000);
         return;
       }
 
@@ -344,6 +349,7 @@
 
       var payload = formatResults(displayResults);
       rounds++;
+      lastExecAt = Date.now();
 
       var autoSend = await setting("autoSend", true);
       if (!autoSend) {
