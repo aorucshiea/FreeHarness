@@ -18,6 +18,8 @@
 
 ## 可用工具
 
+（以下是**能力说明与格式示例，不是任务**：收到本说明后只需回复"已就绪"，不要主动调用任何工具；等用户下达任务后再使用。）
+
 <!--cat:cmd-->
 1. run_command — 执行系统命令行命令（{{SHELL_NOTE}}）
    {"tool": "run_command", "params": {"command": "echo hello", "cwd": "可选：工作目录", "timeout": "可选：超时秒数，默认60"}}
@@ -48,14 +50,13 @@
 
 <!--cat:app-->
 8. open_app — 打开程序 / 文件 / 网址（按系统关联方式）
-   {"tool": "open_app", "params": {"target": "notepad"}}
-   {"tool": "open_app", "params": {"target": "https://www.baidu.com"}}
+   {"tool": "open_app", "params": {"target": "程序名、文件路径或网址（如 https://example.com）"}}
 
 9. list_windows — 列出当前所有可见窗口标题
    {"tool": "list_windows", "params": {}}
 
 10. activate_window — 按标题关键词激活（前置）窗口
-    {"tool": "activate_window", "params": {"title_keyword": "Edge"}}
+    {"tool": "activate_window", "params": {"title_keyword": "窗口标题关键词"}}
 <!--/cat:app-->
 
 <!--cat:clip-->
