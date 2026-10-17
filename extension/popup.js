@@ -1,13 +1,14 @@
 const API = "http://127.0.0.1:8765";
 const $ = (id) => document.getElementById(id);
 
-const KEY_MAP = { enabled: "h_enabled", autoSend: "h_autoSend", maxRounds: "h_maxRounds" };
-const DEFAULTS = { h_enabled: true, h_autoSend: true, h_maxRounds: 0 };
+const KEY_MAP = { enabled: "h_enabled", autoSend: "h_autoSend", maxRounds: "h_maxRounds", selfDrive: "selfDrive" };
+const DEFAULTS = { h_enabled: true, h_autoSend: true, h_maxRounds: 0, selfDrive: true };
 
 function loadSettings() {
   chrome.storage.local.get(DEFAULTS, (o) => {
     $("enabled").checked = o.h_enabled;
     $("autoSend").checked = o.h_autoSend;
+    $("selfDrive").checked = o.selfDrive;
     $("maxRounds").value = o.h_maxRounds;
   });
 }
@@ -209,22 +210,14 @@ function coreFor(platform) {
 
 // 工具分类勾选状态（默认全选）
 let catState = {};
-let selfDriveOn = false; // AI 自我驱动开关（开启时才把 SELF_PROMPT 协议写进提示词）
 
 function loadCats(cb) {
-  chrome.storage.local.get({ h_toolcats: null, selfDrive: false }, (o) => {
+  chrome.storage.local.get({ h_toolcats: null }, (o) => {
     catState = (o.h_toolcats && typeof o.h_toolcats === "object") ? o.h_toolcats : {};
     CATS.forEach(([k]) => { if (typeof catState[k] !== "boolean") catState[k] = true; });
-    selfDriveOn = !!o.selfDrive;
     cb && cb();
   });
 }
-chrome.storage.onChanged.addListener((ch, area) => {
-  if (area === "local" && ch.selfDrive) {
-    selfDriveOn = !!ch.selfDrive.newValue;
-    refreshPreview();
-  }
-});
 
 function renderCatList() {
   const box = $("catList");
@@ -262,14 +255,6 @@ function buildPrompt() {
     let n = 0;
     const renum = block[1].replace(/^(\d+)\. /gm, () => { n += 1; return n + ". "; });
     text = text.replace(block[1], () => renum);
-  }
-  // 自我驱动开启时追加协议说明（关闭时不出现，避免 AI 无谓地自问自答）
-  if (selfDriveOn) {
-    text += "\n\n## 自我驱动（已开启）\n"
-      + "任务需要多步、且你希望不被打断地继续时，在回复末尾输出：\n"
-      + "[SELF_PROMPT]下一步要做的具体指令[/SELF_PROMPT]\n"
-      + "系统会把它当作新的用户消息发给你，你继续执行即可。"
-      + "任务已完成、需要用户确认、或需要用户提供信息时，不要使用。";
   }
   return text.trim();
 }

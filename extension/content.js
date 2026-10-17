@@ -246,8 +246,8 @@
       // 自我驱动：AI 用 [SELF_PROMPT]下一步[/SELF_PROMPT] 给自己下发下一轮输入，扩展自动发回
       var selfPrompt = extractSelfPrompt(text);
       if (selfPrompt) {
-        if (!(await setting("selfDrive", false))) {
-          log("AI 请求自我驱动，但开关未开启（popup → 常用 → AI 自我驱动）");
+        if (!(await setting("selfDrive", true))) {
+          log("AI 请求自我驱动，但开关已关闭（popup → 常用 → AI 自我驱动）");
           return;
         }
         if (selfRounds >= 10) {
