@@ -13,7 +13,7 @@
   var extractSelfPrompt = WHProtocol.extractSelfPrompt;
 
   var STABLE_MS = 1500;       // DOM 停止变化多久视为"生成结束"
-  var processed = new Set();  // 已处理消息指纹（防重复执行）
+  var processed = new Map();  // 已处理消息指纹 → 处理时间戳（去重改为 60 秒窗口，允许同样调用在新消息里再次执行）
   var processedOrder = [];    // 指纹插入顺序（超限时按序淘汰，绝不清空当前）
   var busy = false;           // 执行中锁
   var rounds = 0;             // 本次任务连续工具调用轮数
@@ -26,12 +26,18 @@
   // 记录已处理指纹：超过 300 条时只淘汰最旧的，保留最近 50 条（含刚处理的这条）。
   // 整体 clear 会把当前指纹也忘掉——若结果发送失败，最后一条消息会每 2.5 秒被重复执行。
   function markProcessed(fp) {
-    processed.add(fp);
+    processed.set(fp, Date.now());
     processedOrder.push(fp);
     if (processedOrder.length > 300) {
       var drop = processedOrder.splice(0, processedOrder.length - 50);
       drop.forEach(function (k) { processed.delete(k); });
     }
+  }
+
+  // 指纹是否在最近 ms 毫秒内处理过（超过窗口视为新消息，允许重复执行相同调用）
+  function seenRecently(fp, ms) {
+    var t = processed.get(fp);
+    return !!(t && Date.now() - t < (ms || 60000));
   }
 
   // 预热：忽略注入前已存在的最后一条 AI 消息（历史对话，避免"幽灵发送"）
@@ -274,7 +280,7 @@
     }
 
     var fp = "m" + fingerprint(text.slice(0, 4000));
-    if (processed.has(fp)) return;
+    if (seenRecently(fp, 60000)) return; // 60 秒内同一文本视为重复触发；超过则当作新消息（同样的调用也能再次执行）
     markProcessed(fp);
 
     busy = true;
