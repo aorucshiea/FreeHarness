@@ -49,7 +49,7 @@
 <!--/cat:shot-->
 
 <!--cat:app-->
-8. open_app — 打开程序 / 文件 / 网址（按系统关联方式）
+8. open_app — 打开程序 / 文件 / 网址（按系统关联方式；打开后会自动把新窗口提到前台。若程序已在运行，可能复用现有窗口，此时用 activate_window 前置）
    {"tool": "open_app", "params": {"target": "程序名、文件路径或网址（如 https://example.com）"}}
 
 9. list_windows — 列出当前所有可见窗口标题
