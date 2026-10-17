@@ -50,6 +50,17 @@ webharness/
 
 即成功。这个窗口需要保持开着（用完可关闭）。需要电脑装有 Python 3.8+（`python --version` 可查）。
 
+**自动启动（推荐，配一次永久省事）**
+
+配置后，**点扩展图标时若服务没在运行会自动拉起**，不用再找 bat 双击。在项目根目录执行：
+
+```
+python server\launcher\install_host.py
+```
+
+它会往注册表（HKCU，无需管理员权限）注册一个 Native Messaging Host 并绑定扩展 ID。
+若以后移动了项目目录、或重新加载扩展导致 ID 变化，带上新 ID 重跑：`python server\launcher\install_host.py <扩展ID>`（ID 显示在 edge://extensions 扩展卡片上）。
+
 ### 第 2 步：安装浏览器扩展（Edge 或 Chrome）
 
 1. 打开 `edge://extensions`（Chrome 则是 `chrome://extensions`）

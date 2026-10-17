@@ -1,0 +1,9 @@
+{
+  "name": "com.webharness.launcher",
+  "description": "FreeHarness local service launcher",
+  "path": "C:\\Users\\yt\\WorkBuddy\\2026-10-06-11-05-45\\webharness\\server\\launcher\\launcher_host.bat",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://elhcjaigiodlpealhdhlifgocomoijbk/"
+  ]
+}

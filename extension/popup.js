@@ -44,19 +44,49 @@ $("clear").addEventListener("click", () => {
   chrome.storage.local.set({ log: [] }, renderLog);
 });
 
-async function ping() {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 3000); // 服务半死时不能无限转圈
+// ---- 服务自动拉起（Native Messaging）：点扩展图标时若服务没跑，自动启动 ----
+const HOST_NAME = "com.webharness.launcher";
+
+function healthOnce(timeoutMs) {
+  return new Promise((resolve) => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs || 1500);
+    fetch(API + "/health", { method: "GET", signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((j) => { clearTimeout(t); resolve(j && j.ok ? j : null); })
+      .catch(() => { clearTimeout(t); resolve(null); });
+  });
+}
+
+async function ensureService() {
+  let j = await healthOnce(1500);
+  if (j) return j; // 已在跑，直接返回（无任何副作用）
+  // 未启动：经 native host 拉起 start_server.bat（浏览器扩展不能直接执行本地程序，这是唯一正规通道）
+  appendLog("本地服务未启动，正在自动拉起…");
   try {
-    const r = await fetch(API + "/health", { method: "GET", signal: ctrl.signal });
-    const j = await r.json();
+    chrome.runtime.sendNativeMessage(HOST_NAME, { cmd: "start" }, () => {
+      void chrome.runtime.lastError; // host 未注册时会有 lastError，忽略（下面靠轮询判定结果）
+    });
+  } catch (e) {
+    appendLog("自动拉起失败: " + e);
+  }
+  for (let i = 0; i < 16; i++) { // 最多等 8 秒（Python 冷启动约 1-3 秒）
+    await new Promise((r) => setTimeout(r, 500));
+    j = await healthOnce(1200);
+    if (j) { appendLog("本地服务已自动启动"); return j; }
+  }
+  appendLog("自动启动超时：请手动运行 server/start_server.bat（或检查 native host 注册）");
+  return null;
+}
+
+async function ping() {
+  const j = await ensureService();
+  if (j) {
     $("dot").className = "dot on";
     $("statusText").textContent = "本地服务正常 · 工具: " + (j.tools || []).join(", ");
-  } catch (e) {
+  } else {
     $("dot").className = "dot off";
     $("statusText").textContent = "本地服务未启动";
-  } finally {
-    clearTimeout(timer);
   }
 }
 
