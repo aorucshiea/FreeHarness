@@ -290,13 +290,14 @@
         return;
       }
 
-      var maxRounds = await setting("maxRounds", 100);
+      var maxRounds = await setting("maxRounds", 0);
       // 距上次执行超过 90 秒 → 视为用户重新下达的新任务，轮次归零。
       // 否则连续测试/多步任务会一直累加到上限，后续调用被静默挡掉（表现为"AI 输出调用但界面无反应"）。
       if (lastExecAt && Date.now() - lastExecAt > 90000) rounds = 0;
-      if (rounds >= maxRounds) {
-        log("已达最大轮次 " + maxRounds + "，已停止。可在 popup 调大上限或点「重置轮次」继续。");
-        showToast("⚠️ 已达轮次上限（" + maxRounds + " 轮），执行已暂停。\n点扩展图标 → 高级设置：调大「轮次上限」或点「重置轮次」。", 9000);
+      // maxRounds = 0 表示不限制（默认）；只有用户自己设了上限才检查
+      if (maxRounds > 0 && rounds >= maxRounds) {
+        log("已达你设置的轮次上限 " + maxRounds + "，已停止。可调大上限或点「重置轮次」继续。");
+        showToast("⚠️ 已达你设置的轮次上限（" + maxRounds + " 轮），执行已暂停。\n点扩展图标 → 高级设置：把「轮次上限」调大（0 = 不限制）或点「重置轮次」。", 9000);
         return;
       }
 
@@ -491,9 +492,45 @@
     }, 20000);
   }
 
+  // ---------- 页面悬浮控制按钮：随时暂停/恢复自动执行 ----------
+  var ctrlBtn = null;
+  function updateCtrlBtn(on) {
+    if (!ctrlBtn) return;
+    ctrlBtn.textContent = on ? "⏸ 暂停 FreeHarness" : "▶ 恢复 FreeHarness";
+    ctrlBtn.style.background = on ? "rgba(163,45,45,.92)" : "rgba(59,109,17,.92)";
+    ctrlBtn.title = on ? "点击暂停：AI 的工具调用将不再执行，也不会回传结果" : "点击恢复自动执行";
+  }
+  function mountCtrlBtn() {
+    try {
+      if (ctrlBtn) return;
+      if (!document.body) { setTimeout(mountCtrlBtn, 800); return; }
+      ctrlBtn = document.createElement("button");
+      ctrlBtn.id = "freeharness-ctrl";
+      ctrlBtn.type = "button";
+      ctrlBtn.style.cssText = "position:fixed;right:14px;bottom:14px;z-index:2147483647;" +
+        "padding:7px 13px;border:none;border-radius:18px;color:#fff;font:12px/1.4 system-ui,sans-serif;" +
+        "cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.28);opacity:.85;transition:opacity .2s,background .2s;";
+      ctrlBtn.addEventListener("mouseenter", function () { ctrlBtn.style.opacity = "1"; });
+      ctrlBtn.addEventListener("mouseleave", function () { ctrlBtn.style.opacity = ".85"; });
+      ctrlBtn.addEventListener("click", function () {
+        setting("enabled", true).then(function (now) {
+          chrome.storage.local.set({ h_enabled: !now });
+          updateCtrlBtn(!now);
+          log(now ? "已暂停自动执行（页面按钮 / popup 开关可恢复）" : "已恢复自动执行");
+        });
+      });
+      document.body.appendChild(ctrlBtn);
+      setting("enabled", true).then(updateCtrlBtn);
+      chrome.storage.onChanged.addListener(function (ch, area) {
+        if (area === "local" && ch.h_enabled) updateCtrlBtn(!!ch.h_enabled.newValue);
+      });
+    } catch (e) {}
+  }
+
   if (document.body) {
+    mountCtrlBtn();
     observe();
   } else {
-    document.addEventListener("DOMContentLoaded", observe);
+    document.addEventListener("DOMContentLoaded", function () { mountCtrlBtn(); observe(); });
   }
 })();
