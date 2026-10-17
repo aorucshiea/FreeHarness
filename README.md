@@ -8,9 +8,7 @@
 
 不需要 API key，也不需要另外订阅——用的是你网页版账号自己的额度。
 
-<!-- 演示 GIF：录好后放到 docs/demo.gif，然后删掉下面两行的注释符号
-<p align="center"><img src="docs/demo.gif" width="760" alt="FreeHarness 演示"></p>
--->
+<p align="center"><img src="docs/demo.gif" width="820" alt="FreeHarness 演示：网页 AI 自己打开记事本、写入内容、截图并查看"></p>
 
 ## 它怎么工作
 
