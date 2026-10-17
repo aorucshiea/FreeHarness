@@ -72,25 +72,28 @@ webharness/
 4. AI 输出 [TOOL_CALL] → 本地执行 → 结果自动发回 → AI 继续，全自动循环
 5. 点击扩展图标可打开控制台：总开关、自动发送开关、轮次上限、执行日志
 
-## 工具一览（12 个）
+## 工具一览（18 个）
 
 | 工具 | 说明 |
 |---|---|
 | run_command | 执行 Windows 命令（超时杀整进程树，返回部分输出） |
 | read_file / write_file / append_file | 文件读写（自动建目录） |
 | list_dir | 列目录（类型/大小/修改时间） |
-| screenshot | 全屏截图存 PNG（需 Pillow） |
+| screenshot | 全屏截图存 PNG（需 Pillow；默认存系统临时目录，只保留最近 20 张） |
 | view_image | **让 AI 直接"看到"图片**——图片作为附件自动上传到对话（多模态识图） |
 | open_app | 打开程序/文件/网址（系统关联） |
 | clipboard_read / clipboard_write | 剪贴板文本读写 |
 | list_windows / activate_window | 枚举可见窗口 / 按标题关键词激活窗口 |
+| mouse_move / mouse_click | 移动光标 / 点击（支持双击，内部连发避系统阈值） |
+| mouse_scroll / mouse_drag | 滚轮滚动 / 按住左键拖拽（分步插值，真拖拽不是点击） |
+| key_press / type_text | 按键组合 / 整段文字输入（中文友好，内部经剪贴板粘贴） |
 
 **view_image 用法**（AI 视角）：先 `screenshot` 存图 → 再 `view_image` 带 `prompt` 参数（看图后要做什么）→ 图片自动作为附件发出，AI 用视觉能力直接查看截图内容。
 
 ## 安全设计
 
 - 本地服务**只监听 127.0.0.1**，外网无法访问
-- 服务响应不带 CORS 头：网页里的普通脚本无法直接调用它，只有装了扩展（有 host_permissions）才能
+- 服务响应不带 CORS 头 + **强制 `Content-Type: application/json`**：浏览器"简单请求"（text/plain 等，不触发预检）会被 403 拒绝，堵住恶意网页绕过 CORS 直达本地服务的通道
 - 高危命令黑名单：`format`、`diskpart`、`rm -rf /`、`rd /s /q 盘根`、`shutdown` 等会被拒绝
 - 命令超时上限 300 秒，输出截断，防失控
 - 防死循环：默认最多连续 20 轮工具调用（弹窗可调）；连续 3 轮完全相同的调用自动停止
@@ -128,4 +131,4 @@ AI 没吃透模板。回复："请严格按 [TOOL_CALL]...[/TOOL_CALL] 格式重
 
 - 网页 AI 免费版一般有消息条数/频率限制，长任务可能撞限额
 - DOM 适配依赖各网站前端结构，改版需更新 adapters.js（这正是选浏览器扩展而非固定爬虫的原因：改一个选择器就能修）
-- 图片类内容（截图查看）暂不支持，工具只有文本命令与文件操作
+- 鼠标/键盘为物理操作，执行期间会接管光标与焦点，别和它抢键鼠

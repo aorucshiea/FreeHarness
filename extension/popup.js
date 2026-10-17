@@ -27,8 +27,17 @@ $("maxRounds").addEventListener("change", () => {
 });
 
 $("resetRounds").addEventListener("click", () => {
-  // 通过重连通知所有 content script：轮次计数存在页面上，刷新页面即重置；这里只记录日志
-  appendLog("提示：轮次计数在页面内存中，刷新 AI 网页即可重置。");
+  // 真正把重置命令下发到当前页的 content script（轮次计数存在页面内存）
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs || !tabs.length) return;
+    chrome.tabs.sendMessage(tabs[0].id, { type: "harness-reset" }, (resp) => {
+      if (chrome.runtime.lastError || !resp) {
+        appendLog("重置失败：当前页 WebHarness 未运行（请刷新页面或点扩展图标重新注入）");
+      } else {
+        appendLog("已重置轮次计数与去重状态（适配: " + (resp.adapter || "?") + "）");
+      }
+    });
+  });
 });
 
 $("clear").addEventListener("click", () => {
@@ -36,14 +45,18 @@ $("clear").addEventListener("click", () => {
 });
 
 async function ping() {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 3000); // 服务半死时不能无限转圈
   try {
-    const r = await fetch(API + "/health", { method: "GET" });
+    const r = await fetch(API + "/health", { method: "GET", signal: ctrl.signal });
     const j = await r.json();
     $("dot").className = "dot on";
     $("statusText").textContent = "本地服务正常 · 工具: " + (j.tools || []).join(", ");
   } catch (e) {
     $("dot").className = "dot off";
     $("statusText").textContent = "本地服务未启动";
+  } finally {
+    clearTimeout(timer);
   }
 }
 

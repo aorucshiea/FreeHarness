@@ -8,3 +8,6 @@ __pycache__/
 # os
 Thumbs.db
 Desktop.ini
+
+# runtime log
+*.log

@@ -26,7 +26,7 @@
 5. list_dir — 列出目录内容
    {"tool": "list_dir", "params": {"path": "C:\\Users\\yt"}}
 
-6. screenshot — 屏幕截图（保存 PNG；不写 path 则按时间戳存桌面）
+6. screenshot — 屏幕截图（保存 PNG；不写 path 则自动存到系统临时目录 webharness 文件夹，只保留最近20张）
    {"tool": "screenshot", "params": {"path": "C:\\Users\\yt\\Desktop\\shot.png"}}
 
 7. open_app — 打开程序 / 文件 / 网址（按系统关联方式）
@@ -57,10 +57,20 @@
     {"tool": "mouse_click", "params": {"x": 35, "y": 300, "double": true}}
     {"tool": "mouse_click", "params": {"button": "right"}}
 
-15. key_press — 按键或组合键（输入长文本用 clipboard_write 复制后按 ctrl+v）
+15. key_press — 按键或组合键（输入长文本用 type_text 或 clipboard_write+ctrl+v）
     {"tool": "key_press", "params": {"keys": "ctrl+v"}}
     {"tool": "key_press", "params": {"keys": "enter"}}
     {"tool": "key_press", "params": {"keys": "alt+tab"}}
+
+16. mouse_scroll — 滚轮滚动（正数向下、负数向上，1 格≈120 单位，一屏约 3-5 格；可带坐标先定位）
+    {"tool": "mouse_scroll", "params": {"amount": 5}}
+    {"tool": "mouse_scroll", "params": {"amount": -3, "x": 800, "y": 500}}
+
+17. type_text — 向当前焦点处输入任意文字（支持中文，一次调用完成，内部走剪贴板粘贴；用前先点击目标输入框）
+    {"tool": "type_text", "params": {"text": "你好，这是一段要输入的文字"}}
+
+18. mouse_drag — 按住左键拖拽（拖文件、拖滚动条、框选文本）
+    {"tool": "mouse_drag", "params": {"from_x": 300, "from_y": 400, "to_x": 600, "to_y": 700}}
 
 ## 工具调用格式（严格遵守）
 

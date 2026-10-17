@@ -31,8 +31,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.type === "harness-inject") {
     // popup 请求主动注入当前页（免去用户手动 F5 刷新）
+    // allFrames 必须显式开启：默认只注入顶层 frame，iframe 型聊天站点会漏注入
     chrome.scripting.executeScript(
-      { target: { tabId: msg.tabId }, files: ["protocol.js", "adapters.js", "content.js"] },
+      { target: { tabId: msg.tabId, allFrames: true }, files: ["protocol.js", "adapters.js", "content.js"] },
       () => sendResponse({ ok: true, err: chrome.runtime.lastError ? String(chrome.runtime.lastError) : null })
     );
     return true;

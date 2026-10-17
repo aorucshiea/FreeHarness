@@ -199,5 +199,59 @@ check("key_press 空按键报错", not r["ok"], r)
 r = execute_call({"tool": "key_press", "params": {"keys": "ctrl+hyperjump"}})
 check("key_press 未知按键报错", not r["ok"] and "未知按键" in r["error"], r)
 
+print("== 新增输入工具 ==")
+check("工具总数为 18", len(TOOLS) == 18, len(TOOLS))
+check("mouse_scroll 已注册", "mouse_scroll" in TOOLS, True)
+check("type_text 已注册", "type_text" in TOOLS, True)
+check("mouse_drag 已注册", "mouse_drag" in TOOLS, True)
+
+r = execute_call({"tool": "mouse_scroll", "params": {"amount": 0}})
+check("mouse_scroll 0 不执行", r["ok"] and "未执行" in r["result"], r)
+
+r = execute_call({"tool": "mouse_drag", "params": {"from_x": 1}})
+check("mouse_drag 缺坐标报错", not r["ok"] and "四个整数坐标" in r["error"], r)
+
+r = execute_call({"tool": "mouse_drag", "params": {"from_x": -5, "from_y": 1, "to_x": 10, "to_y": 10}})
+check("mouse_drag 负坐标报错", not r["ok"] and "非负" in r["error"], r)
+
+r = execute_call({"tool": "type_text", "params": {"text": ""}})
+check("type_text 空文本报错", not r["ok"], r)
+
+r = execute_call({"tool": "type_text", "params": {"text": "x" * 20001}})
+check("type_text 超长报错", not r["ok"] and "20000" in r["error"], r)
+
+r = execute_call({"tool": "screenshot", "params": {}})
+check("截图默认存临时目录", r["ok"] and os.path.normcase(tempfile.gettempdir()) in os.path.normcase(r.get("result", "")), r)
+
+print("== HTTP 安全（Content-Type 校验）==")
+import threading
+import urllib.request
+import urllib.error
+from http.server import ThreadingHTTPServer
+from harness_server import Handler
+
+srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+_port = srv.server_address[1]
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+_base = "http://127.0.0.1:%d" % _port
+
+
+def _post(ctype, payload_bytes):
+    req = urllib.request.Request(_base + "/execute", data=payload_bytes,
+                                 headers={"Content-Type": ctype})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+
+
+_body = json.dumps({"calls": [{"tool": "run_command", "params": {"command": "echo ct_probe"}}]}).encode("utf-8")
+code, _ = _post("text/plain", _body)
+check("text/plain 简单请求被拒(403)", code == 403, code)
+code, body = _post("application/json", _body)
+check("application/json 正常执行", code == 200 and "ct_probe" in body, (code, body[:100]))
+srv.shutdown()
+
 print("\n结果: %d 通过, %d 失败" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

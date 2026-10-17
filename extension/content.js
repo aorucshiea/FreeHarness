@@ -13,6 +13,7 @@
 
   var STABLE_MS = 1500;       // DOM 停止变化多久视为"生成结束"
   var processed = new Set();  // 已处理消息指纹（防重复执行）
+  var processedOrder = [];    // 指纹插入顺序（超限时按序淘汰，绝不清空当前）
   var busy = false;           // 执行中锁
   var rounds = 0;             // 本次任务连续工具调用轮数
   var lastCallFp = "";        // 连续相同调用检测
@@ -20,15 +21,42 @@
 
   console.log("[WebHarness] 已激活，站点适配:", A.name);
 
+  // 记录已处理指纹：超过 300 条时只淘汰最旧的，保留最近 50 条（含刚处理的这条）。
+  // 整体 clear 会把当前指纹也忘掉——若结果发送失败，最后一条消息会每 2.5 秒被重复执行。
+  function markProcessed(fp) {
+    processed.add(fp);
+    processedOrder.push(fp);
+    if (processedOrder.length > 300) {
+      var drop = processedOrder.splice(0, processedOrder.length - 50);
+      drop.forEach(function (k) { processed.delete(k); });
+    }
+  }
+
   // 预热：忽略注入前已存在的最后一条 AI 消息（历史对话，避免"幽灵发送"）
   try {
     var t0 = A.lastAssistant();
-    if (t0) processed.add("m" + fingerprint(t0.slice(0, 4000)));
+    if (t0) markProcessed("m" + fingerprint(t0.slice(0, 4000)));
   } catch (e) {}
 
   // 响应 popup 的存活探测（用于判断当前页是否已注入）
   chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
-    if (msg && msg.type === "harness-ping") { sendResponse({ active: true, adapter: A.name }); return true; }
+    if (!msg) return;
+    if (msg.type === "harness-ping") { sendResponse({ active: true, adapter: A.name }); return true; }
+    if (msg.type === "harness-reset") {
+      rounds = 0;
+      lastCallFp = "";
+      repeatCount = 0;
+      genSince = 0;
+      // 重置去重指纹，但保留最后一条消息的指纹——否则它会立刻被再次执行
+      var keep = null;
+      try { var lt = A.lastAssistant(); if (lt) keep = "m" + fingerprint(lt.slice(0, 4000)); } catch (e) {}
+      processed.clear();
+      processedOrder.length = 0;
+      if (keep) markProcessed(keep);
+      log("已重置：轮次计数与去重状态已清空，可继续执行");
+      sendResponse({ ok: true, adapter: A.name });
+      return true;
+    }
   });
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -60,11 +88,19 @@
   function sendExec(calls) {
     return new Promise(function (resolve) {
       var done = false;
+      // 服务端命令默认 60 秒、单个可指定到 300 秒；扩展侧超时必须比它长，
+      // 否则长命令（npm install/大截图）被误判"超时"→ AI 重试 → 同一条命令双执行
+      var maxCallSec = 60;
+      (calls || []).forEach(function (c) {
+        var t = c && c.params ? Number(c.params.timeout) : NaN;
+        if (isFinite(t) && t > maxCallSec) maxCallSec = Math.min(t, 300);
+      });
+      var waitMs = Math.max(25000, (maxCallSec + 15) * 1000);
       var timer = setTimeout(function () {
         if (done) return;
         done = true;
-        resolve({ results: calls.map(function () { return { ok: false, error: "执行超时：扩展后台 15 秒无响应（后台可能已休眠），请点扩展图标或刷新页面后重试" }; }) });
-      }, 15000);
+        resolve({ results: calls.map(function () { return { ok: false, error: "执行超时：扩展后台 " + Math.round(waitMs / 1000) + " 秒无响应。服务端命令可能仍在运行，请先用 list_windows/任务管理器确认，不要盲目重试" }; }) });
+      }, waitMs);
       try {
         chrome.runtime.sendMessage({ type: "harness-exec", calls: calls }, function (res) {
           if (done) return;
@@ -87,6 +123,8 @@
   }
 
   // ---------- 核心检查 ----------
+  var IMG_OK_TEXT = "[图片已作为附件随消息上传，请直接查看附图]";
+  var IMG_FAIL_TEXT = "[图片上传失败：站点附件通道不可用，本条消息没有附图。请勿编造画面，可告知用户或改用文字描述]";
   var genSince = 0; // "生成中"起始时间：某些站点有常驻 stop 类按钮，会让 isGenerating 永远为真、检查永久静默
   async function check() {
     if (busy) return;
@@ -121,8 +159,7 @@
 
     var fp = "m" + fingerprint(text.slice(0, 4000));
     if (processed.has(fp)) return;
-    processed.add(fp);
-    if (processed.size > 300) processed.clear();
+    markProcessed(fp);
 
     busy = true;
     var busyTimer = setTimeout(function () { busy = false; log("执行锁超时，已强制重置"); }, 90000); // 硬兜底
@@ -175,7 +212,7 @@
             var meta = JSON.parse(r.result);
             if (meta && meta.__image__ && meta.data) {
               images.push(meta);
-              return { ok: true, result: "[图片已作为附件随消息上传，请直接查看附图]" };
+              return { ok: true, result: IMG_OK_TEXT };
             }
           } catch (e) {}
         }
@@ -242,8 +279,8 @@
       // 之前查到的 file input 引用变成已脱离文档树的死节点。必须在填字之后重新查询。
       var fileInput = (A.fileInput && A.fileInput()) || genericFileInput();
       if (!fileInput) {
-        log("页面找不到文件上传入口，降级为纯文本发送");
-        return typeAndSend(text);
+        log("页面找不到文件上传入口，降级为纯文本发送（占位文案已改为上传失败说明）");
+        return typeAndSend(text.split(IMG_OK_TEXT).join(IMG_FAIL_TEXT));
       }
       log("探针 fileInput: isConnected=" + fileInput.isConnected + " accept=" + JSON.stringify(fileInput.getAttribute("accept")) + " 文件=" + (meta.name || "image.png") + " " + (meta.data.length * 3 / 4 / 1024 | 0) + "KB");
       var bin = atob(meta.data);
@@ -314,7 +351,10 @@
     });
     mo.observe(document.body, { childList: true, subtree: true, characterData: true });
     setTimeout(check, 2500); // 首次检查
-    setInterval(check, 2500); // 轮询兜底
+    setInterval(function () {
+      if (document.hidden) return; // 后台标签页不轮询（省 CPU）；切回前台后 2.5 秒内自动补查
+      check();
+    }, 2500); // 轮询兜底
     // 心跳保活：MV3 service worker 约 30 秒无活动即休眠，定期唤醒防消息挂起
     setInterval(function () {
       try { chrome.runtime.sendMessage({ type: "harness-keepalive" }, function () {}); } catch (e) {}

@@ -50,6 +50,40 @@ def now():
     return time.strftime("%H:%M:%S")
 
 
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "harness_server.log")
+
+
+def log_line(msg):
+    """控制台 + 日志文件双写（文件超过 2MB 自动保留最近 2000 行）。"""
+    line = "[%s] %s" % (now(), msg)
+    print(line)
+    try:
+        if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 2_000_000:
+            with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
+                tail = f.readlines()[-2000:]
+            with open(LOG_FILE, "w", encoding="utf-8") as f:
+                f.writelines(tail)
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+
+def _cleanup_old_shots(folder, keep=20):
+    """截图目录只保留最近 keep 张，防无限堆积。"""
+    try:
+        import glob
+        files = sorted(glob.glob(os.path.join(folder, "shot_*.png")),
+                       key=os.path.getmtime, reverse=True)
+        for f in files[keep:]:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+    except Exception:
+        pass
+
+
 def truncate(s, n=MAX_OUTPUT_CHARS):
     if len(s) <= n:
         return s
@@ -276,7 +310,9 @@ def tool_screenshot(p):
     path = p.get("path")
     if not path:
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = os.path.join(os.path.expanduser("~"), "Desktop", "webharness_shot_%s.png" % ts)
+        # 默认存临时目录而非桌面：截图是高频操作，堆桌面很快就乱
+        path = os.path.join(tempfile.gettempdir(), "webharness", "shot_%s.png" % ts)
+        _cleanup_old_shots(os.path.dirname(path))
     path = resolve_path(path)
     mon = str(p.get("monitor", "all"))
     img = ImageGrab.grab(all_screens=(mon == "all"))
@@ -573,6 +609,78 @@ def tool_key_press(p):
     return "已按键: " + keys
 
 
+def tool_mouse_scroll(p):
+    """滚轮滚动：amount 正数向下、负数向上（1 格=120 单位，通常一屏约 3-5 格）。
+    可带 x/y 先定位到目标区域再滚。"""
+    _ensure_dpi_aware()
+    x, y = p.get("x"), p.get("y")
+    if x is not None and y is not None:
+        tool_mouse_move({"x": x, "y": y})
+    try:
+        amount = int(p.get("amount", 3))
+    except (TypeError, ValueError):
+        amount = 3
+    amount = max(-50, min(50, amount))
+    if amount == 0:
+        return "滚动量为 0，未执行"
+    user32 = ctypes.windll.user32
+    user32.mouse_event.argtypes = [wintypes.DWORD] * 4 + [ctypes.c_void_p]
+    user32.mouse_event.restype = None
+    MOUSEEVENTF_WHEEL = 0x0800
+    delta = 120 if amount > 0 else -120
+    dw = wintypes.DWORD(delta & 0xFFFFFFFF)  # 负数按无符号 32 位传（mouse_event 要求）
+    for _ in range(abs(amount)):
+        user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, dw, None)
+        time.sleep(0.03)
+    return "已滚动 %d 格（%s%s）" % (abs(amount), "向下" if amount > 0 else "向上",
+                                ("，位置 (%s,%s)" % (x, y)) if x is not None else "")
+
+
+def tool_type_text(p):
+    """向当前焦点处输入任意文字（含中文）。等价于 clipboard_write + ctrl+v 的组合，
+    但一次调用完成，省一轮往返。注意：焦点必须已在输入框内。"""
+    text = str(p.get("text", ""))
+    if not text:
+        raise ValueError("text 不能为空")
+    if len(text) > 20000:
+        raise ValueError("单次最多 20000 字符（可分段发送）")
+    _clipboard_write(text)
+    time.sleep(0.1)
+    tool_key_press({"keys": "ctrl+v"})
+    return "已输入 %d 字符（经剪贴板粘贴；剪贴板内容已被替换为该文本）" % len(text)
+
+
+def tool_mouse_drag(p):
+    """按住左键从 (from_x,from_y) 拖到 (to_x,to_y)。
+    用于拖文件、拖滚动条、框选文本。"""
+    try:
+        fx, fy = int(p.get("from_x")), int(p.get("from_y"))
+        tx, ty = int(p.get("to_x")), int(p.get("to_y"))
+    except (TypeError, ValueError):
+        raise ValueError("需要 from_x/from_y/to_x/to_y 四个整数坐标")
+    if min(fx, fy, tx, ty) < 0:
+        raise ValueError("坐标必须是非负整数（物理像素）")
+    _ensure_dpi_aware()
+    user32 = ctypes.windll.user32
+    user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
+    user32.SetCursorPos.restype = wintypes.BOOL
+    user32.mouse_event.argtypes = [wintypes.DWORD] * 4 + [ctypes.c_void_p]
+    user32.mouse_event.restype = None
+    MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP = 0x0002, 0x0004
+    user32.SetCursorPos(fx, fy)
+    time.sleep(0.15)
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, None)
+    time.sleep(0.1)
+    # 分步插值移动：一步跳到位很多程序不认拖拽，会当成点击
+    steps = 12
+    for i in range(1, steps + 1):
+        user32.SetCursorPos(fx + (tx - fx) * i // steps, fy + (ty - fy) * i // steps)
+        time.sleep(0.02)
+    time.sleep(0.1)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, None)
+    return "已从 (%d,%d) 拖拽到 (%d,%d)" % (fx, fy, tx, ty)
+
+
 TOOLS = {
     "run_command": tool_run_command,
     "read_file": tool_read_file,
@@ -588,7 +696,10 @@ TOOLS = {
     "view_image": tool_view_image,
     "mouse_move": tool_mouse_move,
     "mouse_click": tool_mouse_click,
+    "mouse_scroll": tool_mouse_scroll,
+    "mouse_drag": tool_mouse_drag,
     "key_press": tool_key_press,
+    "type_text": tool_type_text,
 }
 
 
@@ -641,6 +752,14 @@ class Handler(BaseHTTPRequestHandler):
         if self.path != "/execute":
             self._json(404, {"ok": False, "error": "not found"})
             return
+        # 安全：强制 application/json。
+        # 浏览器"简单请求"（text/plain 等）不触发 CORS 预检、可直达本服务，恶意网页
+        # 正是借它绕过"无 CORS 头"的防护；而 Content-Type 为 application/json 会触发
+        # 预检（本服务不回 CORS 头 → 预检失败），扩展的 fetch 不受此限。
+        ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if ctype != "application/json":
+            self._json(403, {"ok": False, "error": "Content-Type 必须为 application/json"})
+            return
         try:
             n = int(self.headers.get("Content-Length", "0"))
             body = json.loads(self.rfile.read(n).decode("utf-8"))
@@ -662,7 +781,7 @@ class Handler(BaseHTTPRequestHandler):
             results.append(r)
             tool = (c or {}).get("tool", "?")
             preview = (r.get("result") or r.get("error") or "")[:60].replace("\n", " ")
-            print("[%s] %-14s %s | %s" % (now(), tool, "OK " if r["ok"] else "ERR", preview))
+            log_line("%-14s %s | %s" % (tool, "OK " if r["ok"] else "ERR", preview))
         self._json(200, {"ok": all(r["ok"] for r in results), "results": results})
 
 
