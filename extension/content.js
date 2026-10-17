@@ -10,6 +10,7 @@
   var extractCalls = WHProtocol.extractCalls;
   var formatResults = WHProtocol.formatResults;
   var fingerprint = WHProtocol.fingerprint;
+  var extractSelfPrompt = WHProtocol.extractSelfPrompt;
 
   var STABLE_MS = 1500;       // DOM 停止变化多久视为"生成结束"
   var processed = new Set();  // 已处理消息指纹（防重复执行）
@@ -47,6 +48,7 @@
       lastCallFp = "";
       repeatCount = 0;
       genSince = 0;
+      selfRounds = 0;
       // 重置去重指纹，但保留最后一条消息的指纹——否则它会立刻被再次执行
       var keep = null;
       try { var lt = A.lastAssistant(); if (lt) keep = "m" + fingerprint(lt.slice(0, 4000)); } catch (e) {}
@@ -181,6 +183,7 @@
   // 真实调用（如 AI 主动探测环境）必须照常执行——否则任务一开始就卡死。
   var exampleFps = {};
   var lastSeenText = ""; // 诊断用：上一次抓到并记录过的消息文本
+  var selfRounds = 0;    // 自我驱动已进行轮数（上限 10，防无限自循环烧额度）
   function stableFp(v) {
     if (v === null || typeof v !== "object") return JSON.stringify(v);
     if (Array.isArray(v)) return "[" + v.map(stableFp).join(",") + "]";
@@ -192,8 +195,8 @@
     if (!(await setting("enabled", true))) return;
     if (A.isGenerating && A.isGenerating()) {
       if (!genSince) genSince = Date.now();
-      if (Date.now() - genSince < 120000) return; // 2 分钟内信任"生成中"
-      // 超过 2 分钟仍报生成中：大概率是常驻按钮误判，放行继续检查
+      if (Date.now() - genSince < 15000) return; // 15 秒内信任"生成中"，之后强制检查（防残留按钮把检查永久卡死）
+      // 超过 15 秒仍报生成中：大概率是常驻按钮误判，放行继续检查
     } else {
       genSince = 0;
     }
@@ -237,7 +240,30 @@
     }
 
     var calls = extractCalls(text);
-    if (!calls.length) { rounds = 0; return; } // 该消息无调用：新任务，重置轮次
+    if (!calls.length) {
+      rounds = 0; // 该消息无调用：新任务，重置轮次
+      // 自我驱动：AI 用 [SELF_PROMPT]下一步[/SELF_PROMPT] 给自己下发下一轮输入，扩展自动发回
+      var selfPrompt = extractSelfPrompt(text);
+      if (selfPrompt) {
+        if (!(await setting("selfDrive", false))) {
+          log("AI 请求自我驱动，但开关未开启（popup → 常用 → AI 自我驱动）");
+          return;
+        }
+        if (selfRounds >= 10) {
+          log("自我驱动已达 10 轮上限，已停止。请人工确认任务状态。");
+          return;
+        }
+        var spfp = "s" + fingerprint(selfPrompt);
+        if (processed.has(spfp)) return; // 同一句自我提示不重复发送
+        markProcessed(spfp);
+        selfRounds++;
+        log("AI 自我提示（" + selfRounds + "/10）: " + selfPrompt.slice(0, 70).replace(/\s+/g, " "));
+        var sentSelf = false;
+        try { sentSelf = await typeAndSend(selfPrompt); } catch (e) { log("自我提示发送异常: " + e); }
+        if (!sentSelf) log("自我提示发送失败，自驱已停止");
+      }
+      return;
+    }
 
     // 安全边界：思考(reaasoning)里的 [TOOL_CALL] 是模型"内心戏"（推演/示例/假想），绝不能执行。
     // 思考流永远先于正文流，合规的调用必是消息里最后一个 [TOOL_CALL] 块——只执行它。

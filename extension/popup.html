@@ -14,7 +14,7 @@
   .dot { width:9px; height:9px; border-radius:50%; background:#c3c7cc; flex:none; }
   .dot.on { background:var(--ok); }
   .dot.off { background:var(--bad); }
-  .switchrow { display:flex; gap:16px; }
+  .switchrow { display:flex; gap:12px; flex-wrap:wrap; }
   .switchrow label { display:flex; align-items:center; gap:5px; cursor:pointer; }
   input[type=checkbox] { accent-color:var(--brand); margin:0; }
   input[type=number] { width:52px; padding:1px 4px; border:1px solid var(--line); border-radius:4px; font:inherit; }
@@ -54,6 +54,7 @@
     <div class="switchrow">
       <label><input type="checkbox" id="enabled">启用</label>
       <label><input type="checkbox" id="autoSend">自动发送结果</label>
+      <label><input type="checkbox" id="selfDrive" title="AI 可以用 [SELF_PROMPT] 给自己下发下一步，自动连续推进（最多 10 轮）">AI 自我驱动</label>
     </div>
   </div>
 

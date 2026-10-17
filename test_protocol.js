@@ -92,6 +92,12 @@ r = P.extractCalls('[TOOL_CALL]{"tool":"write_file","params":{"path":"C:\\Users\
 eq("裸双引号+反斜杠组合", r.length === 1 && r[0].tool === "write_file" &&
   r[0].params.content === 'echo "hello world" > out.txt', true);
 
+console.log("== extractSelfPrompt ==");
+eq("提取自我提示", P.extractSelfPrompt("好的，继续。\n[SELF_PROMPT]检查刚才写的文件有没有语法错误[/SELF_PROMPT]"), "检查刚才写的文件有没有语法错误");
+eq("无标记返回 null", P.extractSelfPrompt("普通回复，没有标记"), null);
+eq("空内容返回 null", P.extractSelfPrompt("[SELF_PROMPT]   [/SELF_PROMPT]"), null);
+eq("非字符串返回 null", P.extractSelfPrompt(null), null);
+
 console.log("== formatResults ==");
 const out = P.formatResults([{ ok: true, result: "abc" }, { ok: false, error: "boom" }]);
 eq("格式包含标记", out.startsWith("[TOOL_RESULT]\n") && out.endsWith("\n[/TOOL_RESULT]"), true);

@@ -121,6 +121,15 @@
     return "[TOOL_RESULT]\n" + payload + "\n[/TOOL_RESULT]";
   }
 
+  // 提取 AI 自我驱动指令：AI 用 [SELF_PROMPT]下一步[/SELF_PROMPT] 给自己下发下一轮输入
+  function extractSelfPrompt(text) {
+    if (typeof text !== "string") return null;
+    var m = text.match(/\[SELF_PROMPT\]([\s\S]{1,2000}?)\[\/SELF_PROMPT\]/);
+    if (!m) return null;
+    var s = m[1].trim();
+    return s ? s : null;
+  }
+
   function fingerprint(s) {
     var h = 5381;
     for (var i = 0; i < s.length; i++) {
@@ -129,7 +138,7 @@
     return String(h);
   }
 
-  var api = { extractCalls: extractCalls, formatResults: formatResults, fingerprint: fingerprint };
+  var api = { extractCalls: extractCalls, formatResults: formatResults, fingerprint: fingerprint, extractSelfPrompt: extractSelfPrompt };
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api; // node 测试用
   }

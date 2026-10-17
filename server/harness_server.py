@@ -286,29 +286,7 @@ def tool_open_app(p):
     for pat in DANGEROUS_PATTERNS:
         if re.search(pat, target, re.IGNORECASE):
             raise PermissionError("目标命中安全黑名单: %s" % target[:100])
-    bk = get_backend()
-    # 记录打开前的窗口列表：打开后找出新出现的窗口并前置，
-    # 否则"程序已在运行"时 Windows 会复用现有窗口且不置顶，表现为"点了没反应"
-    try:
-        before = bk.list_windows()
-    except Exception:
-        before = None
-    bk.open_target(target)
-    if before is not None:
-        for _ in range(6):  # 最多等 3 秒
-            time.sleep(0.5)
-            try:
-                after = bk.list_windows()
-            except Exception:
-                break
-            added = [w for w in after if w not in before]
-            if added:
-                try:
-                    bk.activate_window(added[0])
-                    return "已打开并置于前台: %s" % added[0]
-                except Exception:
-                    return "已打开: %s（新窗口: %s，前置失败可再调 activate_window）" % (target, added[0])
-        return "已打开: %s（未检测到新窗口：程序可能已在运行并复用了现有窗口，可用 activate_window 前置）" % target
+    get_backend().open_target(target)
     return "已打开: %s" % target
 
 
