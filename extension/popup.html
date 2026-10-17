@@ -27,9 +27,11 @@
   details > summary:hover { color:#333; }
   details[open] > summary { border-bottom:1px dashed var(--line); color:#333; }
   details .inner { padding:8px 10px; }
-  details pre { max-height:130px; overflow:auto; background:#f6f7f8; padding:6px; font-size:11px; white-space:pre-wrap; word-break:break-all; border-radius:6px; color:#333; margin:6px 0 0; }
-  .injectrow { display:flex; align-items:center; gap:8px; margin-top:6px; }
+  details pre { max-height:140px; overflow:auto; background:#f6f7f8; padding:6px; font-size:11px; white-space:pre-wrap; word-break:break-all; border-radius:6px; color:#333; margin:6px 0 0; }
+  .injectrow { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .injectrow .hint { flex:1; text-align:right; font-size:12px; color:var(--muted); }
+  .catlist { display:grid; grid-template-columns:1fr 1fr; gap:3px 8px; margin-top:4px; }
+  .catlist label { display:flex; align-items:center; gap:5px; font-size:12px; cursor:pointer; }
   #log { max-height:170px; overflow-y:auto; font-size:12px; color:#444; }
   #log .e { padding:3px 0; border-bottom:1px dashed #eee; word-break:break-all; }
   #log .t { color:#aaa; margin-right:6px; font-variant-numeric:tabular-nums; }
@@ -57,15 +59,21 @@
 
   <div class="card card-pad">
     <h4>提示词</h4>
-    <textarea id="persona" rows="2" placeholder="小助手人设（可选）：如「简洁高效的中文助手」"></textarea>
-    <details>
-      <summary style="padding:6px 0; color:var(--muted);">核心提示词（已锁定 · 含工具协议，修改会导致无法执行）</summary>
-      <pre id="coreView"></pre>
-    </details>
     <div class="injectrow">
-      <button class="primary" id="injectPrompt">注入到当前对话</button>
+      <button class="primary" id="injectPrompt">注入提示词</button>
+      <button id="promptCfgBtn">设置</button>
       <button id="reloadTab" style="display:none;">刷新本页</button>
       <span class="hint" id="injectHint"></span>
+    </div>
+    <div id="promptCfg" style="display:none; margin-top:8px;">
+      <textarea id="persona" rows="2" placeholder="小助手人设（可选）：如「简洁高效的中文助手」"></textarea>
+      <div class="muted" style="margin-top:8px;">注入哪些工具（工具说明按当前系统自动适配）：</div>
+      <div id="catList" class="catlist"></div>
+      <details style="margin-top:6px;">
+        <summary style="padding:4px 0;">预览注入内容（核心提示词 · 已锁定）</summary>
+        <pre id="coreView"></pre>
+      </details>
+      <div class="muted" id="platInfo" style="margin-top:4px;"></div>
     </div>
   </div>
 

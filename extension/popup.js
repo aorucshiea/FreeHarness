@@ -46,6 +46,16 @@ $("clear").addEventListener("click", () => {
 
 // ---- 服务自动拉起（Native Messaging）：点扩展图标时若服务没跑，自动启动 ----
 const HOST_NAME = "com.webharness.launcher";
+const PLATFORM_MAP = { windows: "win32", macos: "darwin", linux: "linux" };
+let curPlatform = ""; // win32 / darwin / linux：决定注入哪一份平台提示词
+const CATS = [
+  ["cmd", "命令行"],
+  ["files", "文件读写"],
+  ["shot", "截图/看图"],
+  ["app", "程序与窗口"],
+  ["clip", "剪贴板"],
+  ["input", "鼠标键盘"]
+];
 
 function healthOnce(timeoutMs) {
   return new Promise((resolve) => {
@@ -60,7 +70,10 @@ function healthOnce(timeoutMs) {
 
 async function ensureService() {
   let j = await healthOnce(1500);
-  if (j) return j; // 已在跑，直接返回（无任何副作用）
+  if (j) {
+    if (j.platform) curPlatform = PLATFORM_MAP[j.platform] || curPlatform;
+    return j; // 已在跑，直接返回（无任何副作用）
+  }
   // 未启动：经 native host 拉起 start_server.bat（浏览器扩展不能直接执行本地程序，这是唯一正规通道）
   appendLog("本地服务未启动，正在自动拉起…");
   try {
@@ -73,7 +86,11 @@ async function ensureService() {
   for (let i = 0; i < 16; i++) { // 最多等 8 秒（Python 冷启动约 1-3 秒）
     await new Promise((r) => setTimeout(r, 500));
     j = await healthOnce(1200);
-    if (j) { appendLog("本地服务已自动启动"); return j; }
+    if (j) {
+      if (j.platform) curPlatform = PLATFORM_MAP[j.platform] || curPlatform;
+      appendLog("本地服务已自动启动");
+      return j;
+    }
   }
   appendLog("自动启动超时：请手动运行 server/start_server.bat（或检查 native host 注册）");
   return null;
@@ -92,6 +109,7 @@ async function ping() {
     $("statusText").textContent = "本地服务未启动";
     $("statusText").title = "";
   }
+  refreshPreview(); // 平台确认后刷新提示词预览
 }
 
 function renderLog() {
@@ -158,12 +176,10 @@ chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
   });
 });
 
-// ---- 提示词一键注入（人设可编辑，核心锁定） ----
-const MY_VER = chrome.runtime.getManifest().version; // 用于和页面里的 content script 做版本握手
+// ---- 提示词注入（按平台定制 + 工具分类可选） ----
+const MY_VER = chrome.runtime.getManifest().version; // 与页面 content script 做版本握手
 const personaEl = $("persona");
 const coreView = $("coreView");
-const corePrompt = (window.WH_PROMPTS && window.WH_PROMPTS.core) || "";
-coreView.textContent = corePrompt || "(prompts.js 未加载，请重新加载扩展)";
 
 function showReloadNeeded(msg) {
   $("injectHint").textContent = msg || "需刷新本页";
@@ -175,6 +191,90 @@ $("reloadTab").addEventListener("click", () => {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs && tabs.length) chrome.tabs.reload(tabs[0].id);
   });
+});
+
+// 服务还没起来时 /health 拿不到 platform，用浏览器平台兜底推断
+function guessPlatform() {
+  const p = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+  if (/win/i.test(p)) return "win32";
+  if (/mac/i.test(p)) return "darwin";
+  return "linux";
+}
+
+function coreFor(platform) {
+  const cores = (window.WH_PROMPTS && window.WH_PROMPTS.cores) || {};
+  return cores[platform] || cores.win32 || "";
+}
+
+// 工具分类勾选状态（默认全选）
+let catState = {};
+function loadCats(cb) {
+  chrome.storage.local.get({ h_toolcats: null }, (o) => {
+    catState = (o.h_toolcats && typeof o.h_toolcats === "object") ? o.h_toolcats : {};
+    CATS.forEach(([k]) => { if (typeof catState[k] !== "boolean") catState[k] = true; });
+    cb && cb();
+  });
+}
+
+function renderCatList() {
+  const box = $("catList");
+  box.innerHTML = "";
+  CATS.forEach(([key, label]) => {
+    const lab = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = catState[key] !== false;
+    cb.addEventListener("change", () => {
+      catState[key] = cb.checked;
+      chrome.storage.local.set({ h_toolcats: catState });
+      refreshPreview();
+    });
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode(label));
+    box.appendChild(lab);
+  });
+}
+
+// 生成最终提示词：取当前平台 core → 删掉未勾选的分类块 → 清理标记 → 重排序号
+function buildPrompt() {
+  let text = coreFor(curPlatform || guessPlatform());
+  if (!text) return "";
+  CATS.forEach(([key]) => {
+    if (catState[key] === false) {
+      text = text.replace(new RegExp("<!--cat:" + key + "-->[\\s\\S]*?<!--/cat:" + key + "-->\\n*", "g"), "");
+    }
+  });
+  text = text.replace(/<!--\/?cat:[a-z]+-->\n?/g, ""); // 清理剩余标记
+  text = text.replace(/\n{3,}/g, "\n\n");
+  // 只对「可用工具」清单重排序号（删分类后编号会断）；规则列表的 1-9 绝不能动
+  const block = text.match(/(## 可用工具[\s\S]*?)(?=\n## 工具调用格式)/);
+  if (block) {
+    let n = 0;
+    const renum = block[1].replace(/^(\d+)\. /gm, () => { n += 1; return n + ". "; });
+    text = text.replace(block[1], () => renum);
+  }
+  return text.trim();
+}
+
+function refreshPreview() {
+  if (!coreView) return;
+  const plat = curPlatform || guessPlatform();
+  coreView.textContent = buildPrompt() || "(prompts.js 未加载，请重新加载扩展)";
+  const info = $("platInfo");
+  if (info) {
+    const names = { win32: "Windows", darwin: "macOS", linux: "Linux" };
+    const picked = CATS.filter(([k]) => catState[k] !== false).length;
+    info.textContent = "当前平台：" + (names[plat] || "未知")
+      + " · 工具说明只含本平台 · 已选 " + picked + "/6 类";
+  }
+}
+
+$("promptCfgBtn").addEventListener("click", () => {
+  const box = $("promptCfg");
+  const opening = box.style.display === "none";
+  box.style.display = opening ? "" : "none";
+  $("promptCfgBtn").textContent = opening ? "收起" : "设置";
+  if (opening) refreshPreview();
 });
 
 chrome.storage.local.get({ h_persona: "" }, (o) => { personaEl.value = o.h_persona; });
@@ -200,12 +300,13 @@ $("injectPrompt").addEventListener("click", () => {
         return;
       }
       const persona = personaEl.value.trim();
-      if (!corePrompt) {
-        hint.textContent = "核心提示词缺失";
+      const core = buildPrompt();
+      if (!core) {
+        hint.textContent = "提示词缺失";
         appendLog("注入失败：prompts.js 未加载，请重新加载扩展");
         return;
       }
-      const text = (persona ? persona + "\n\n" : "") + corePrompt;
+      const text = (persona ? persona + "\n\n" : "") + core;
       hint.textContent = "注入中…";
       chrome.tabs.sendMessage(tabId, { type: "harness-inject-prompt", text }, (r) => {
         if (chrome.runtime.lastError || !r) {
@@ -220,8 +321,16 @@ $("injectPrompt").addEventListener("click", () => {
           return;
         }
         hint.textContent = "已发送";
-        appendLog("已注入提示词（" + (resp.adapter || "?") + "，" + (persona ? "含人设" : "仅核心") + "，共 " + text.length + " 字）");
+        const picked = CATS.filter(([k]) => catState[k] !== false).length;
+        appendLog("已注入提示词（" + (resp.adapter || "?") + "，"
+          + (persona ? "含人设" : "仅核心") + "，工具 " + picked + "/6 类，共 " + text.length + " 字）");
       });
     });
   });
+});
+
+// 初始化：分类勾选 + 预览
+loadCats(() => {
+  renderCatList();
+  refreshPreview();
 });
