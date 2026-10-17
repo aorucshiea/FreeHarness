@@ -44,22 +44,40 @@ def port_alive():
 def main():
     msg = read_message()
     here = os.path.dirname(os.path.abspath(__file__))
-    bat = os.path.join(os.path.dirname(here), "start_server.bat")
+    server_dir = os.path.dirname(here)
 
     if port_alive():
         send_message({"ok": True, "already": True})
         return
 
-    if not os.path.isfile(bat):
-        send_message({"ok": False, "error": "start_server.bat not found: " + bat})
+    # Windows：start_server.bat（最小化 cmd 窗口，方便用户随时关闭）
+    if sys.platform == "win32":
+        bat = os.path.join(server_dir, "start_server.bat")
+        if not os.path.isfile(bat):
+            send_message({"ok": False, "error": "start_server.bat not found: " + bat})
+            return
+        try:
+            subprocess.Popen(
+                'start "" /min "%s"' % bat,
+                shell=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            send_message({"ok": True, "started": True})
+        except Exception as e:
+            send_message({"ok": False, "error": str(e)})
         return
 
-    # 以最小化窗口启动服务（分离进程：host 退出后服务继续活）
+    # macOS / Linux：静默后台运行（日志见 server/harness_server.log）
+    sh = os.path.join(server_dir, "start_server.sh")
+    if not os.path.isfile(sh):
+        send_message({"ok": False, "error": "start_server.sh not found: " + sh})
+        return
     try:
         subprocess.Popen(
-            'start "" /min "%s"' % bat,
-            shell=True,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            ["/bin/sh", sh],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
         send_message({"ok": True, "started": True})
     except Exception as e:

@@ -142,7 +142,10 @@ check("open_app 黑名单拦截", not r["ok"] and "黑名单" in r["error"], r)
 # 剪贴板：备份 → 写读往返 → 恢复
 orig = ""
 try:
-    from harness_server import _clipboard_read, _clipboard_write
+    from platforms import get_backend
+    _bk = get_backend()
+    _clipboard_read = _bk.clipboard_read
+    _clipboard_write = _bk.clipboard_write
     try:
         orig = _clipboard_read()
     except Exception:

@@ -21,11 +21,16 @@ WebHarness 把 Agent 的 harness 搬到网页上：**扩展捕捉网页 AI 输�
 ```
 webharness/
 ├── server/
-│   ├── harness_server.py    本地执行服务（零依赖，Python 3.8+）
-│   ├── start_server.bat     双击启动
+│   ├── harness_server.py    本地执行服务（跨平台，零依赖，Python 3.8+）
+│   ├── platforms/           平台后端层
+│   │   ├── win32_backend.py   Windows：ctypes 直调 Win32，零依赖
+│   │   ├── darwin_backend.py  macOS：osascript / pbcopy / screencapture
+│   │   └── linux_backend.py   Linux：xdotool / xclip / grim（imagemagick）
+│   ├── start_server.bat     启动（Windows）
+│   ├── start_server.sh      启动（macOS / Linux）
 │   └── launcher/            点扩展图标自动拉起服务（Native Messaging）
-│       ├── native_host.py   stdio host：服务没跑就启动 start_server.bat
-│       ├── install_host.py  一次性注册（写 HKCU 注册表）
+│       ├── native_host.py   stdio host：服务没跑就启动本地服务
+│       ├── install_host.py  一次性注册（Windows 写注册表；macOS/Linux 复制 manifest）
 │       └── com.webharness.launcher.json  host manifest（绑定扩展 ID）
 ├── extension/               浏览器扩展（Edge / Chrome 通用）
 │   ├── manifest.json
@@ -40,32 +45,45 @@ webharness/
 └── README.md                本文件
 ```
 
+## 支持平台
+
+| 平台 | 核心工具（命令 / 文件 / 图片） | GUI 工具（鼠标键盘 / 窗口 / 剪贴板 / 截图） |
+|---|---|---|
+| **Windows 10/11** | ✅ 零依赖 | ✅ 零依赖（截图需 `pip install pillow`） |
+| **macOS 11+** | ✅ 零依赖 | ✅ 全部系统自带（osascript / screencapture / pbcopy）；首次使用需在「系统设置 → 隐私与安全性 → 辅助功能」授权终端或 Python |
+| **Linux（X11）** | ✅ 零依赖 | ⚠️ 需安装系统工具：`sudo apt install xdotool xclip imagemagick`（Wayland 用 `wl-clipboard` + `grim`，窗口控制受限） |
+
+> 📱 iOS / Android 不支持：手机上没有可运行的本地 Python 服务，移动端浏览器扩展也不允许启动本地进程，这是系统级限制。
+
 ## 安装（一次性，约 2 分钟）
 
 ### 第 1 步：启动本地服务
 
-双击 `server\start_server.bat`，看到：
+**Windows**：双击 `server\start_server.bat`
 
-```
-====================================================
- WebHarness 本地执行服务  v0.1
- 地址: http://127.0.0.1:8765
- 工具: append_file, list_dir, read_file, run_command, write_file
-====================================================
+**macOS / Linux**：
+
+```bash
+cd server && chmod +x start_server.sh && ./start_server.sh
 ```
 
-即成功。这个窗口需要保持开着（用完可关闭）。需要电脑装有 Python 3.8+（`python --version` 可查）。
+看到服务横幅即成功（窗口需保持开着，用完可关闭）。需要 Python 3.8+（`python --version` / `python3 --version` 可查）。
 
 **自动启动（推荐，配一次永久省事）**
 
-配置后，**点扩展图标时若服务没在运行会自动拉起**，不用再找 bat 双击。在项目根目录执行：
+配置后，**点扩展图标时若服务没在运行会自动拉起**，不用再找脚本双击。在项目根目录执行：
 
 ```
+# Windows
 python server\launcher\install_host.py
+
+# macOS / Linux
+python3 server/launcher/install_host.py
 ```
 
-它会往注册表（HKCU，无需管理员权限）注册一个 Native Messaging Host 并绑定扩展 ID。
-若以后移动了项目目录、或重新加载扩展导致 ID 变化，带上新 ID 重跑：`python server\launcher\install_host.py <扩展ID>`（ID 显示在 edge://extensions 扩展卡片上）。
+Windows 会写注册表（HKCU，无需管理员）；macOS / Linux 则把 host manifest 复制到各浏览器约定的
+`NativeMessagingHosts` 目录。两种方式都会绑定扩展 ID。
+若以后移动了项目目录、或重新加载扩展导致 ID 变化，带上新 ID 重跑：`install_host.py <扩展ID>`（ID 显示在扩展管理卡片上）。
 
 ### 第 2 步：安装浏览器扩展（Edge 或 Chrome）
 
