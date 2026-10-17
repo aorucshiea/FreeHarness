@@ -26,6 +26,41 @@
     return v;
   }
 
+  // 修复字符串内部的裸双引号：AI 常直接写 dir "C:\path\工作文档"，
+  // 内层引号未转义会提前结束 JSON 字符串。启发式：字符串内遇到的 "，
+  // 若其后第一个非空白字符不是 , } ] : 或已是结尾，则视为内容引号并补转义。
+  function fixBareQuotes(s) {
+    var out = "";
+    var inStr = false;
+    for (var i = 0; i < s.length; i++) {
+      var c = s[i];
+      if (c === "\\") {
+        out += c + (s[i + 1] || "");
+        i++;
+        continue;
+      }
+      if (c === "\"") {
+        if (!inStr) {
+          inStr = true;
+          out += c;
+          continue;
+        }
+        var j = i + 1;
+        while (j < s.length && (s[j] === " " || s[j] === "\t" || s[j] === "\n" || s[j] === "\r")) j++;
+        var nx = s[j];
+        if (j >= s.length || nx === "," || nx === "}" || nx === "]" || nx === ":") {
+          inStr = false;
+          out += c;
+        } else {
+          out += "\\\"";
+        }
+        continue;
+      }
+      out += c;
+    }
+    return out;
+  }
+
   function lenientParse(raw) {
     // 严格解析也能出"合法转义但语义错误"（C:\test 的 \t）——reviveStrings 内部
     // 只对盘符开头/UNC 字符串还原控制字符，普通文本（文件内容等）绝不受影响
@@ -46,6 +81,10 @@
       .replace(/\\(?![\\/"bfnrt]|u[0-9a-fA-F]{4})/g, "\\\\")
       .replace(/[\x00-\x1f]/g, function (c) { return JSON.stringify(c).slice(1, -1); });
     try { return reviveStrings(JSON.parse(fixedC)); } catch (e) {}
+    // D: 反斜杠修复 + 字符串内部的裸双引号（如 command 里直接写 "C:\path\文件"）+ 裸控制字符
+    var fixedD = fixBareQuotes(fixedA)
+      .replace(/[\x00-\x1f]/g, function (c) { return JSON.stringify(c).slice(1, -1); });
+    try { return reviveStrings(JSON.parse(fixedD)); } catch (e) {}
     return null;
   }
 

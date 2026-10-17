@@ -82,6 +82,16 @@ eq("解析失败占位", r.length === 1 && r[0].tool === "__parse_error__", true
 r = P.extractCalls('[TOOL_CALL]{“tool”: “run_command”, “params”: {“command”: “hostname”}}[/TOOL_CALL]');
 eq("全角引号容错", r.length === 1 && r[0].tool === "run_command" && r[0].params.command === "hostname", true);
 
+// 19. 字符串内部的裸双引号（command 里写 dir "C:\Users\..."，内层引号未转义）→ 修复后解析成功
+r = P.extractCalls('[TOOL_CALL]\n{"tool": "run_command", "params": {"command": "dir "C:\\Users\\yt\\Desktop\\工作文档""}}\n[/TOOL_CALL]');
+eq("裸双引号容错", r.length === 1 && r[0].tool === "run_command" &&
+  r[0].params.command === 'dir "C:\\Users\\yt\\Desktop\\工作文档"', true);
+
+// 20. 裸双引号 + 反斜杠 + 中文路径组合（AI 写带引号的路径命令，最容易失败的一种）
+r = P.extractCalls('[TOOL_CALL]{"tool":"write_file","params":{"path":"C:\\Users\\yt\\Desktop\\新建文本文档.txt","content":"echo "hello world" > out.txt"}}[/TOOL_CALL]');
+eq("裸双引号+反斜杠组合", r.length === 1 && r[0].tool === "write_file" &&
+  r[0].params.content === 'echo "hello world" > out.txt', true);
+
 console.log("== formatResults ==");
 const out = P.formatResults([{ ok: true, result: "abc" }, { ok: false, error: "boom" }]);
 eq("格式包含标记", out.startsWith("[TOOL_RESULT]\n") && out.endsWith("\n[/TOOL_RESULT]"), true);
