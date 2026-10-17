@@ -70,7 +70,17 @@
         } catch (e) {
           reason = String(e);
         }
-        if (ok) { skipNextUntil = Date.now() + 120000; log("提示词已发送，120 秒内忽略 AI 的确认回复（防示例调用被误执行）"); }
+        if (ok) {
+          skipNextUntil = Date.now() + 120000;
+          // 提取模板里的示例调用做指纹（含示例的 list_dir/echo 等），真实调用不在其中
+          exampleFps = {};
+          try {
+            extractCalls(text).forEach(function (c) {
+              if (c.tool !== "__parse_error__") exampleFps[c.tool + "|" + stableFp(c.params)] = 1;
+            });
+          } catch (e) {}
+          log("提示词已发送（120 秒内忽略对模板示例的复述；真实调用照常执行）");
+        }
         sendResponse({ ok: !!ok, reason: reason });
       })();
       return true;
@@ -166,7 +176,16 @@
   var IMG_OK_TEXT = "[图片已作为附件随消息上传，请直接查看附图]";
   var IMG_FAIL_TEXT = "[图片上传失败：站点附件通道不可用，本条消息没有附图。请勿编造画面，可告知用户或改用文字描述]";
   var genSince = 0; // "生成中"起始时间：某些站点有常驻 stop 类按钮，会让 isGenerating 永远为真、检查永久静默
-  var skipNextUntil = 0; // 注入提示词后的忽略窗口（截止时间戳）：忽略 AI 的"就绪"确认回复，防模板示例调用被执行
+  var skipNextUntil = 0; // 注入提示词后的观察窗口（截止时间戳）
+  // 注入时记录"模板示例调用"的指纹：窗口内只忽略"复述模板示例"的调用，
+  // 真实调用（如 AI 主动探测环境）必须照常执行——否则任务一开始就卡死。
+  var exampleFps = {};
+  function stableFp(v) {
+    if (v === null || typeof v !== "object") return JSON.stringify(v);
+    if (Array.isArray(v)) return "[" + v.map(stableFp).join(",") + "]";
+    var ks = Object.keys(v).sort();
+    return "{" + ks.map(function (k) { return JSON.stringify(k) + ":" + stableFp(v[k]); }).join(",") + "}";
+  }
   async function check() {
     if (busy) return;
     if (!(await setting("enabled", true))) return;
@@ -188,14 +207,23 @@
     } catch (e) {}
     if (!text || text.length < 10) return;
 
-    // 刚注入提示词：AI 的这条"就绪"确认回复不当任务处理（模板里的示例 [TOOL_CALL] 若被复述不能执行）
+    // 注入提示词后的观察窗口：只拦截"复述模板示例"的调用；真实调用必须放行
     if (skipNextUntil) {
       if (Date.now() > skipNextUntil) {
-        skipNextUntil = 0; // 窗口过期（AI 迟迟没回确认），恢复正常处理
+        skipNextUntil = 0; // 窗口过期，恢复正常处理
       } else {
-        var fp0 = "m" + fingerprint(text.slice(0, 4000));
-        if (!processed.has(fp0)) { markProcessed(fp0); skipNextUntil = 0; return; }
-        return; // 文本还未变化（AI 尚未回复确认），继续等待
+        var calls0 = extractCalls(text);
+        var onlyExamples = calls0.length > 0 && calls0.every(function (c) {
+          return c.tool === "__parse_error__" || exampleFps[c.tool + "|" + stableFp(c.params)];
+        });
+        if (onlyExamples) {
+          // 这条回复只是复述模板示例：标记已处理，不执行
+          var fp0 = "m" + fingerprint(text.slice(0, 4000));
+          if (!processed.has(fp0)) { markProcessed(fp0); skipNextUntil = 0; log("忽略 AI 对模板示例的复述（非真实调用）"); return; }
+          return;
+        }
+        // 有真实调用（或本条没有调用）→ 确认阶段结束，正常往下走
+        if (calls0.length > 0) skipNextUntil = 0;
       }
     }
 
