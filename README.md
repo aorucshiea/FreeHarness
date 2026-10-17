@@ -1,4 +1,4 @@
-# FreeHarness — 解放你的网页纯文本 AI
+# FreeHarness — 解放网页 AI
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)]()

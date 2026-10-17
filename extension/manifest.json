@@ -1,14 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "FreeHarness-解放你的网页纯文本AI",
+  "name": "FreeHarness - 解放网页 AI",
   "version": "0.9.0",
-  "description": "解放你的网页纯文本AI：让免费的网页版 AI（DeepSeek/GLM/ChatGPT 等）直接操作你的电脑——执行命令、读写文件、截图、点鼠标，零 API 成本。",
+  "description": "解放网页 AI：把免费的网页版 AI（DeepSeek/GLM/ChatGPT 等）变成能操作你电脑的 Agent——执行命令、读写文件、截图看图、点鼠标，零 API 成本。",
   "permissions": ["storage", "scripting", "tabs", "nativeMessaging"],
   "host_permissions": ["http://127.0.0.1:8765/*"],
   "background": { "service_worker": "background.js" },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "FreeHarness-解放你的网页纯文本AI"
+    "default_title": "FreeHarness - 解放网页 AI"
   },
   "content_scripts": [
     {
