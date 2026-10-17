@@ -1,4 +1,4 @@
-// WebHarness 协议模块 — 纯函数，无 chrome/DOM 依赖，可被 node 单测
+// FreeHarness 协议模块 — 纯函数，无 chrome/DOM 依赖，可被 node 单测
 // 协议：AI 在回复中输出
 //   [TOOL_CALL]{"tool":"run_command","params":{"command":"dir"}}[/TOOL_CALL]
 // 系统执行后把结果作为用户消息发回：

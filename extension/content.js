@@ -1,4 +1,4 @@
-// WebHarness 主逻辑：监听 AI 消息 → 提取工具调用 → 本地执行 → 结果自动发回
+// FreeHarness 主逻辑：监听 AI 消息 → 提取工具调用 → 本地执行 → 结果自动发回
 (function () {
   if (window.__WH_ACTIVE) return; // 防止 popup 主动注入时重复初始化
   window.__WH_ACTIVE = true;
@@ -19,7 +19,7 @@
   var lastCallFp = "";        // 连续相同调用检测
   var repeatCount = 0;
 
-  console.log("[WebHarness] 已激活，站点适配:", A.name);
+  console.log("[FreeHarness] 已激活，站点适配:", A.name);
 
   // 记录已处理指纹：超过 300 条时只淘汰最旧的，保留最近 50 条（含刚处理的这条）。
   // 整体 clear 会把当前指纹也忘掉——若结果发送失败，最后一条消息会每 2.5 秒被重复执行。
@@ -80,7 +80,7 @@
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
   function log(msg) {
-    console.log("[WebHarness]", msg);
+    console.log("[FreeHarness]", msg);
     try {
       chrome.storage.local.get("log", function (o) {
         var arr = o.log || [];
@@ -303,7 +303,7 @@
       if (!sent) {
         showToast("⚠️ 结果自动发送失败：站点输入/发送接口可能已改版。\n建议：刷新本页（Ctrl+F5）或重新加载扩展。结果已复制到剪贴板，可手动粘贴。", 9000);
         try { await navigator.clipboard.writeText(payload); } catch (e) {}
-        console.log("[WebHarness] 完整结果:", payload);
+        console.log("[FreeHarness] 完整结果:", payload);
       }
     } finally {
       clearTimeout(busyTimer);

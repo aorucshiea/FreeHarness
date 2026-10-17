@@ -8,7 +8,7 @@
 > 对比 Claude Code / Cursor（$20/月起）：能力相近，成本为 0。
 
 网页版 AI（ DeepSeek / 通义 / 智谱 / 元宝 / 豆包 / Gemini/ChatGPT / Claude / Kimi ）免费但没有本地执行能力。
-WebHarness 把 Agent 的 harness 搬到网页上：**扩展捕捉网页 AI 输出的工具调用 → 在你电脑上执行 → 结果自动发回网页**，形成完整的 Agent 循环。
+FreeHarness 把 Agent 的 harness 搬到网页上：**扩展捕捉网页 AI 输出的工具调用 → 在你电脑上执行 → 结果自动发回网页**，形成完整的 Agent 循环。
 
 仍处于早期开发阶段，满足了基本的功能，另外许多harness功能尚未完善。
 预计未来一个月内将填补大多数功能。
@@ -98,7 +98,7 @@ Windows 会写注册表（HKCU，无需管理员）；macOS / Linux 则把 host 
 2. 打开右上角/左侧的 **"开发人员模式 / Developer mode"** 开关
 3. 点 **"加载解压缩扩展 / Load unpacked"**
 4. 选择本项目的 `extension` 文件夹（不是 webharness 根目录！）
-5. 工具栏出现 WebHarness 图标即成功
+5. 工具栏出现 FreeHarness 图标即成功
 
 ### 第 3 步：使用（提示词一键注入）
 
@@ -157,7 +157,7 @@ Windows 会写注册表（HKCU，无需管理员）；macOS / Linux 则把 host 
 - **扩展与本地服务通信异常** → 刷新本页（Ctrl+F5）或到 edge://extensions 重新加载扩展
 - **结果自动发送失败**（站点接口改版）→ 刷新页面后重试；结果已自动复制到剪贴板，可手动粘贴
 
-另外在浏览器 DevTools 控制台搜 `[WebHarness]` 可看到完整执行日志。
+另外在浏览器 DevTools 控制台搜 `[FreeHarness]` 可看到完整执行日志。
 
 ## 安全设计
 
@@ -177,7 +177,7 @@ AI 没吃透模板。回复："请严格按 [TOOL_CALL]...[/TOOL_CALL] 格式重
 
 **Q: 扩展没反应？**
 1. 控制台（点扩展图标）看本地服务是否绿灯
-2. `F12` 控制台搜 `[WebHarness]` 看日志
+2. `F12` 控制台搜 `[FreeHarness]` 看日志
 3. 确认网站在扩展 manifest 的 matches 列表里
 4. AI 生成中（有停止按钮）时扩展故意不动作，等生成完
 

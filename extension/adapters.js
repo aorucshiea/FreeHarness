@@ -1,4 +1,4 @@
-// WebHarness 站点适配器
+// FreeHarness 站点适配器
 // 每个适配器提供：
 //   name           站点名
 //   test()         hostname 是否匹配

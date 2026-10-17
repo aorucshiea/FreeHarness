@@ -32,7 +32,7 @@ $("resetRounds").addEventListener("click", () => {
     if (!tabs || !tabs.length) return;
     chrome.tabs.sendMessage(tabs[0].id, { type: "harness-reset" }, (resp) => {
       if (chrome.runtime.lastError || !resp) {
-        appendLog("重置失败：当前页 WebHarness 未运行（请刷新页面或点扩展图标重新注入）");
+        appendLog("重置失败：当前页 FreeHarness 未运行（请刷新页面或点扩展图标重新注入）");
       } else {
         appendLog("已重置轮次计数与去重状态（适配: " + (resp.adapter || "?") + "）");
       }
@@ -159,10 +159,10 @@ chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
   chrome.tabs.sendMessage(tabId, { type: "harness-ping" }, function (resp) {
     if (chrome.runtime.lastError || !resp) {
       chrome.runtime.sendMessage({ type: "harness-inject", tabId: tabId }, function (r) {
-        appendLog("已向当前页注入 WebHarness" + (r && r.ok ? "（无需刷新页面）" : "（失败，请刷新页面）"));
+        appendLog("已向当前页注入 FreeHarness" + (r && r.ok ? "（无需刷新页面）" : "（失败，请刷新页面）"));
       });
     } else {
-      appendLog("当前页 WebHarness 运行中（适配: " + resp.adapter + "）");
+      appendLog("当前页 FreeHarness 运行中（适配: " + resp.adapter + "）");
       var ri = $("roundsInfo");
       if (ri) {
         if (typeof resp.rounds === "number") ri.textContent = "已执行 " + resp.rounds + " 轮";
@@ -289,7 +289,7 @@ $("injectPrompt").addEventListener("click", () => {
     const tabId = tabs[0].id;
     chrome.tabs.sendMessage(tabId, { type: "harness-ping" }, (resp) => {
       if (chrome.runtime.lastError || !resp) {
-        appendLog("注入失败：当前页 WebHarness 未运行（请在 AI 站点页面使用）");
+        appendLog("注入失败：当前页 FreeHarness 未运行（请在 AI 站点页面使用）");
         showReloadNeeded("需刷新本页");
         return;
       }

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-WebHarness 本地执行服务（跨平台：Windows / macOS / Linux）
+FreeHarness 本地执行服务（跨平台：Windows / macOS / Linux）
 监听 127.0.0.1:8765，接收浏览器扩展转发来的 AI 工具调用并在本机执行。
 零第三方依赖，仅 Python 标准库（Python 3.8+）；截图建议安装 Pillow（也可用系统截图命令）。
 
@@ -431,7 +431,7 @@ def execute_call(call):
 # ---------------- HTTP ----------------
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "WebHarness/0.7"
+    server_version = "FreeHarness/0.7"
 
     def log_message(self, fmt, *args):  # 覆盖默认杂乱日志
         pass
@@ -512,7 +512,7 @@ def _configure_stdout():
 def main():
     _configure_stdout()
     print("=" * 58)
-    print(" WebHarness 本地执行服务  v0.7  (%s)" % platform_name())
+    print(" FreeHarness 本地执行服务  v0.7  (%s)" % platform_name())
     print(" 地址: http://%s:%d" % (HOST, PORT))
     print(" 工具: %s" % ", ".join(TOOLS))
     print(" 安全: 仅本机可访问 | 高危命令黑名单已启用")

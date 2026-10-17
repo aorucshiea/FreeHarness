@@ -1,14 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "WebHarness — 网页AI本地工具执行器",
-  "version": "0.6.0",
-  "description": "捕捉网页AI输出的工具调用，在你电脑上执行，并把结果自动发回，让免费网页AI变成能干活的Agent。",
+  "name": "FreeHarness-解放网页ai",
+  "version": "0.9.0",
+  "description": "解放网页AI：让免费的网页版 AI（DeepSeek/GLM/ChatGPT 等）直接操作你的电脑——执行命令、读写文件、截图、点鼠标，零 API 成本。",
   "permissions": ["storage", "scripting", "tabs", "nativeMessaging"],
   "host_permissions": ["http://127.0.0.1:8765/*"],
   "background": { "service_worker": "background.js" },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "WebHarness"
+    "default_title": "FreeHarness-解放网页ai"
   },
   "content_scripts": [
     {

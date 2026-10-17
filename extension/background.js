@@ -1,4 +1,4 @@
-// WebHarness 后台：转发工具调用到本地服务
+// FreeHarness 后台：转发工具调用到本地服务
 // fetch 由扩展 host_permissions 授权，不受页面 CORS 限制
 const API = "http://127.0.0.1:8765";
 
@@ -43,7 +43,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get("log", (o) => {
     const arr = o.log || [];
-    arr.push({ t: new Date().toLocaleTimeString(), msg: "WebHarness 已安装。请先启动本地服务 start_server.bat" });
+    arr.push({ t: new Date().toLocaleTimeString(), msg: "FreeHarness 已安装。请先启动本地服务 start_server.bat" });
     chrome.storage.local.set({ log: arr });
   });
 });
