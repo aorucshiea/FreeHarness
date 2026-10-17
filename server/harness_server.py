@@ -431,7 +431,7 @@ def execute_call(call):
 # ---------------- HTTP ----------------
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "FreeHarness/0.7"
+    server_version = "FreeHarness/0.9.2"
 
     def log_message(self, fmt, *args):  # 覆盖默认杂乱日志
         pass
@@ -495,29 +495,44 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def _configure_stdout():
-    """按控制台实际代码页适配输出编码（Windows GBK 控制台也能正常显示中文）。"""
+    """统一控制台编码为 UTF-8。
+
+    Windows 下控制台代码页（936/437/65001）与 Python 输出编码不一致时中文必乱码。
+    做法：先把控制台切到 65001（Windows 10+ 支持），输出也用 utf-8，两侧一致；
+    切换失败时退回按实际代码页映射（GBK 控制台就用 gbk 输出）。
+    """
+    enc = "utf-8"
     try:
         import ctypes
-        cp = ctypes.windll.kernel32.GetConsoleOutputCP()
-        enc = {936: "gbk", 950: "big5", 932: "cp932"}.get(cp, "utf-8")
+        k = ctypes.windll.kernel32
+        k.SetConsoleOutputCP(65001)
+        k.SetConsoleCP(65001)
     except Exception:
-        enc = "utf-8"
-    try:
-        sys.stdout.reconfigure(encoding=enc, errors="replace")
-        sys.stderr.reconfigure(encoding=enc, errors="replace")
-    except Exception:
-        pass
+        try:
+            import ctypes
+            cp = ctypes.windll.kernel32.GetConsoleOutputCP()
+            enc = {936: "gbk", 950: "big5", 932: "cp932"}.get(cp, "utf-8")
+        except Exception:
+            enc = "utf-8"
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding=enc, errors="replace")
+        except Exception:
+            pass
 
 
 def main():
     _configure_stdout()
-    print("=" * 58)
-    print(" FreeHarness 本地执行服务  v0.7  (%s)" % platform_name())
+    tools = sorted(TOOLS)
+    print("=" * 62)
+    print(" FreeHarness 本地执行服务  v0.9.2  (%s)" % platform_name())
     print(" 地址: http://%s:%d" % (HOST, PORT))
-    print(" 工具: %s" % ", ".join(TOOLS))
+    print(" 工具: %d 个" % len(tools))
+    for i in range(0, len(tools), 4):  # 每行 4 个，避免一行太长折行
+        print("   " + "  ".join("%-15s" % t for t in tools[i:i + 4]).rstrip())
     print(" 安全: 仅本机可访问 | 高危命令黑名单已启用")
     print(" 关闭: 直接关本窗口 或 Ctrl+C")
-    print("=" * 58)
+    print("=" * 62)
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     try:
         srv.serve_forever()
