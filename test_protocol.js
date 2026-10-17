@@ -98,6 +98,14 @@ eq("无标记返回 null", P.extractSelfPrompt("普通回复，没有标记"), n
 eq("空内容返回 null", P.extractSelfPrompt("[SELF_PROMPT]   [/SELF_PROMPT]"), null);
 eq("非字符串返回 null", P.extractSelfPrompt(null), null);
 
+// 21. XML 风格 <tool_call>（DeepSeek/Qwen 训练数据里的格式，模型可能漂移过去）
+r = P.extractCalls('好的，我看一下\n<tool_call>\n{"tool": "view_image", "params": {"path": "C:\\\\a.png"}}\n</tool_call>');
+eq("XML 风格 tool_call 容错", r.length === 1 && r[0].tool === "view_image", true);
+
+// 22. 标签大小写混用
+r = P.extractCalls('[Tool_Call]{"tool":"list_dir","params":{"path":"C:/"}}[/Tool_Call]');
+eq("标签大小写混用容错", r.length === 1 && r[0].tool === "list_dir", true);
+
 console.log("== formatResults ==");
 const out = P.formatResults([{ ok: true, result: "abc" }, { ok: false, error: "boom" }]);
 eq("格式包含标记", out.startsWith("[TOOL_RESULT]\n") && out.endsWith("\n[/TOOL_RESULT]"), true);

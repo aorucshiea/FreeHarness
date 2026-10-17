@@ -89,14 +89,18 @@
   }
 
   function extractCalls(text) {
-    // 结束标记容忍 AI 笔误：[/TOOL_CALL}（花括号）也能识别
-    var re = /\[TOOL_CALL\][\s\S]*?\[\/TOOL_CALL[\]\}]/g;
+    // 支持两种标签风格（大小写不敏感）：
+    //   [TOOL_CALL]{...}[/TOOL_CALL]  —— 本协议（结束标记容忍 AI 笔误 [/TOOL_CALL}）
+    //   <tool_call>{...}</tool_call>  —— 模型训练数据里的 XML 风格，DeepSeek/Qwen 常漂移过去
+    var re = /(?:\[TOOL_CALL\]|<tool_call>)[\s\S]*?(?:\[\/TOOL_CALL[\]\}]|<\/tool_call>)/gi;
     var calls = [];
     var m;
     while ((m = re.exec(text)) !== null) {
       var raw = m[0]
-        .replace(/^\[TOOL_CALL\]/, "")
-        .replace(/\[\/TOOL_CALL[\]\}]$/, "")
+        .replace(/^\[TOOL_CALL\]/i, "")
+        .replace(/^<tool_call>/i, "")
+        .replace(/\[\/TOOL_CALL[\]\}]$/i, "")
+        .replace(/<\/tool_call>$/i, "")
         .trim();
       // 容错：剥掉 AI 可能加的 markdown 围栏
       raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
