@@ -3,6 +3,9 @@
 网页版 AI（ DeepSeek / 通义 / 智谱 / 元宝 / 豆包 / Gemini/ChatGPT / Claude / Kimi ）免费但没有本地执行能力。
 WebHarness 把 Agent 的 harness 搬到网页上：**扩展捕捉网页 AI 输出的工具调用 → 在你电脑上执行 → 结果自动发回网页**，形成完整的 Agent 循环。
 
+仍处于早期开发阶段，满足了基本的功能，另外许多harness功能尚未完善。
+预计未来一个月内将填补大多数功能。
+觉得该项目“有点意思”？那么star一下，可能让它更加闪光！
 ```
 网页 AI 回复 [TOOL_CALL]{...}
       │
