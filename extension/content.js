@@ -180,6 +180,7 @@
   // 注入时记录"模板示例调用"的指纹：窗口内只忽略"复述模板示例"的调用，
   // 真实调用（如 AI 主动探测环境）必须照常执行——否则任务一开始就卡死。
   var exampleFps = {};
+  var lastSeenText = ""; // 诊断用：上一次抓到并记录过的消息文本
   function stableFp(v) {
     if (v === null || typeof v !== "object") return JSON.stringify(v);
     if (Array.isArray(v)) return "[" + v.map(stableFp).join(",") + "]";
@@ -206,6 +207,14 @@
       if (document.documentElement.dataset.whLast !== head) document.documentElement.dataset.whLast = head;
     } catch (e) {}
     if (!text || text.length < 10) return;
+
+    // 诊断：抓到的文本变化但没调用时记一条（限流），排查"AI 明明输出了调用却没执行"
+    if (text !== lastSeenText) {
+      lastSeenText = text;
+      if (text.indexOf("[TOOL_CALL") === -1) {
+        log("抓到 AI 消息（无调用）: " + text.slice(0, 60).replace(/\s+/g, " "));
+      }
+    }
 
     // 注入提示词后的观察窗口：只拦截"复述模板示例"的调用；真实调用必须放行
     if (skipNextUntil) {

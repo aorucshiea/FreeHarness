@@ -141,7 +141,13 @@
         return lastTextOf(['.ds-markdown.ds-markdown--block', '.ds-markdown']);
       },
       isGenerating: function () {
-        return !!document.querySelector('div[role="button"][class*="stop"], button[class*="stop"]');
+        // 只认"可见"的停止按钮：页面里常驻的隐藏节点会让检查永久静默
+        var nodes = document.querySelectorAll('div[role="button"][class*="stop"], button[class*="stop"]');
+        for (var i = 0; i < nodes.length; i++) {
+          var r = nodes[i].getBoundingClientRect();
+          if (r.width > 4 && r.height > 4) return true;
+        }
+        return false;
       },
       input: function () { return firstVisible(['textarea#chat-input', 'textarea']); },
       fill: fillControl,
