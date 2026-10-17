@@ -284,7 +284,7 @@
     markProcessed(fp);
 
     busy = true;
-    var busyTimer = setTimeout(function () { busy = false; log("执行锁超时，已强制重置"); }, 90000); // 硬兜底
+    var busyTimer = setTimeout(function () { busy = false; log("执行锁超时（25 秒），已强制重置"); }, 25000); // 硬兜底：正常一次执行+发送 < 5 秒
     try {
       log("检测到 " + calls.length + " 个工具调用 [" + A.name + "]");
 
@@ -463,8 +463,7 @@
       await sleep(350);
       var sent = false;
       try { sent = A.send(); } catch (e) {}
-      if (sent) return true;
-      // 回退：模拟 Enter
+      if (sent) return true;      // 回退：模拟 Enter
       ["keydown", "keyup"].forEach(function (t) {
         el.dispatchEvent(new KeyboardEvent(t, {
           key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true
@@ -488,10 +487,10 @@
     });
     mo.observe(document.body, { childList: true, subtree: true, characterData: true });
     setTimeout(check, 2500); // 首次检查
-    setInterval(function () {
-      if (document.hidden) return; // 后台标签页不轮询（省 CPU）；切回前台后 2.5 秒内自动补查
-      check();
-    }, 2500); // 轮询兜底
+    // 轮询：后台标签页也照常检查。
+    // 之前"hidden 时跳过"是错的——AI 操作记事本/其它窗口时本页会变后台，
+    // 跳过会导致 AI 的回复完全不被处理（表现为"打开程序后就卡住"）。
+    setInterval(check, 2500);
     // 心跳保活：MV3 service worker 约 30 秒无活动即休眠，定期唤醒防消息挂起
     setInterval(function () {
       try { chrome.runtime.sendMessage({ type: "harness-keepalive" }, function () {}); } catch (e) {}
