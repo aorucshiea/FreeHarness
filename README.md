@@ -1,4 +1,4 @@
-# FreeHarness — 让免费网页 AI 变成能操作你电脑的 Agent
+# FreeHarness — 解放你的网页纯文本 AI
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)]()
