@@ -140,6 +140,15 @@
       lastAssistant: function () {
         return lastTextOf(['.ds-markdown.ds-markdown--block', '.ds-markdown']);
       },
+      // 取最近一条消息里"思考/推理"区块的文本（用于诊断：调用被写进思考块时正文看不到）
+      reasoningText: function () {
+        var nodes = document.querySelectorAll('[class*="think" i], [class*="reasoning" i]');
+        for (var i = nodes.length - 1; i >= 0; i--) {
+          var t = (nodes[i].innerText || nodes[i].textContent || "").trim();
+          if (t) return t;
+        }
+        return "";
+      },
       isGenerating: function () {
         // 只认"可见"的停止按钮：页面里常驻的隐藏节点会让检查永久静默
         var nodes = document.querySelectorAll('div[role="button"][class*="stop"], button[class*="stop"]');
@@ -151,6 +160,53 @@
       },
       input: function () { return firstVisible(['textarea#chat-input', 'textarea']); },
       fill: fillControl,
+      // 上传图片后需开启"识图"开关（眼睛图标），否则图片只被当普通文档、模型看不到内容。
+      // 找不到时返回说明字符串；content.js 会把结果写进日志，便于继续适配。
+      enableImage: function () {
+        var sels = [
+          '[aria-label*="识图"]', '[title*="识图"]', '[class*="vision" i]',
+          '[class*="image-understand" i]', '[class*="eye" i][role="button"]'
+        ];
+        for (var i = 0; i < sels.length; i++) {
+          var nodes;
+          try { nodes = document.querySelectorAll(sels[i]); } catch (e) { continue; }
+          for (var j = 0; j < nodes.length; j++) {
+            var el = nodes[j];
+            var r = el.getBoundingClientRect();
+            if (r.width < 4 || r.height < 4) continue;
+            if (el.disabled || el.getAttribute("aria-disabled") === "true") continue;
+            el.click();
+            return "已点击开关：" + sels[i];
+          }
+        }
+        var all = document.querySelectorAll("button, div[role='button'], span, label");
+        for (var k = 0; k < all.length; k++) {
+          var t = (all[k].textContent || "").trim();
+          if (t === "识图" || t === "开启识图" || t === "图片理解" || (t.length <= 6 && t.indexOf("识图") !== -1)) {
+            var rr = all[k].getBoundingClientRect();
+            if (rr.width >= 4 && rr.height >= 4) { all[k].click(); return "已点击文字按钮：" + t; }
+          }
+        }
+        // 找不到开关时，把页面上可见的可交互元素特征转储到日志，便于后续精确适配
+        try {
+          var cand = [];
+          var nodes = document.querySelectorAll("button, [role='button'], [class*='icon'], [class*='toggle'], [class*='switch']");
+          for (var n = 0; n < nodes.length && cand.length < 12; n++) {
+            var nd = nodes[n];
+            var rc = nd.getBoundingClientRect();
+            if (rc.width < 4 || rc.height < 4) continue;
+            var txt = (nd.textContent || "").trim().slice(0, 10);
+            var aria = nd.getAttribute("aria-label") || "";
+            var ttl = nd.getAttribute("title") || "";
+            var cls = String(nd.className || "").slice(0, 36);
+            if (!txt && !aria && !ttl && !cls) continue;
+            cand.push(txt + "|" + aria + "|" + ttl + "|" + cls);
+          }
+          return ("未找到识图开关；候选: " + cand.join(" ;; ")).slice(0, 290);
+        } catch (e3) {
+          return "未找到识图开关（站内 UI 可能已变化）";
+        }
+      },
       send: function () {
         return clickButton(['div[role="button"][aria-label*="发送"]', 'button[class*="send"]']);
       }

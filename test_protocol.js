@@ -18,6 +18,14 @@ eq("标准单个", r, [{ tool: "run_command", params: { command: "dir" } }]);
 r = P.extractCalls('[TOOL_CALL]\n```json\n{"tool":"list_dir","params":{"path":"C:\\\\Users"}}\n```\n[/TOOL_CALL]');
 eq("markdown围栏容错", r, [{ tool: "list_dir", params: { path: "C:\\Users" } }]);
 
+// 2b. 标签括号混用/笔误（DeepSeek 实测会输出 "<TOOL_CALL]...[/TOOL_CALL]"）
+r = P.extractCalls('<TOOL_CALL]{"tool":"mouse_click","params":{"x":760,"y":1456}}[/TOOL_CALL]');
+eq("开标签尖括号+方括号混用", r, [{ tool: "mouse_click", params: { x: 760, y: 1456 } }]);
+r = P.extractCalls('[TOOL_CALL>{"tool":"list_dir","params":{}}</TOOL_CALL>');
+eq("开标签方括号+尖括号混用", r, [{ tool: "list_dir", params: {} }]);
+r = P.extractCalls('<TOOL_CALL>{"tool":"read_file","params":{"path":"a.txt"}}</TOOL_CALL>');
+eq("纯尖括号标签", r, [{ tool: "read_file", params: { path: "a.txt" } }]);
+
 // 3. 无调用
 r = P.extractCalls("任务完成，桌面共有 5 个文件。");
 eq("无调用返回空数组", r, []);
@@ -116,6 +124,17 @@ eq("结果顺序保留", parsed.results[1].error, "boom");
 console.log("== fingerprint ==");
 eq("稳定哈希", P.fingerprint("abc"), P.fingerprint("abc"));
 eq("区分不同串", P.fingerprint("abc") !== P.fingerprint("abd"), true);
+
+console.log("== resultChunk / countOccurrences ==");
+const payload2 = P.formatResults([{ ok: true, result: "截图已保存: C:\\Users\\Administrator\\Desktop\\webharness_shot_20261008_111535.png" }]);
+const chunk2 = P.resultChunk(payload2);
+eq("特征段包含结果内容", chunk2.indexOf("webharness_shot_20261008_111535") !== -1, true);
+eq("特征段不含空白", /\s/.test(chunk2), false);
+eq("特征段跳过公共前缀", chunk2.indexOf("[TOOL_RESULT]") === -1, true);
+eq("计数正常", P.countOccurrences("aa bb aa", "aa"), 2);
+eq("计数容忍空白差异", P.countOccurrences("截图 已保存 :C \\Users", "截图已保存:C\\Users"), 1);
+eq("空 needle 返回 0", P.countOccurrences("abc", ""), 0);
+eq("不匹配返回 0", P.countOccurrences("abcdef", "xyz"), 0);
 
 console.log("\n结果: " + pass + " 通过, " + fail + " 失败");
 process.exit(fail ? 1 : 0);

@@ -1,14 +1,16 @@
 const API = "http://127.0.0.1:8765";
 const $ = (id) => document.getElementById(id);
 
-const KEY_MAP = { enabled: "h_enabled", autoSend: "h_autoSend", maxRounds: "h_maxRounds", selfDrive: "selfDrive" };
-const DEFAULTS = { h_enabled: true, h_autoSend: true, h_maxRounds: 0, selfDrive: true };
+const KEY_MAP = { enabled: "h_enabled", autoSend: "h_autoSend", autoKeepalive: "h_autoKeepalive", autoFollow: "h_autoFollow", maxRounds: "h_maxRounds", selfDrive: "h_selfDrive" };
+const DEFAULTS = { h_enabled: true, h_autoSend: true, h_autoKeepalive: true, h_autoFollow: true, h_maxRounds: 0, h_selfDrive: true };
 
 function loadSettings() {
   chrome.storage.local.get(DEFAULTS, (o) => {
     $("enabled").checked = o.h_enabled;
     $("autoSend").checked = o.h_autoSend;
-    $("selfDrive").checked = o.selfDrive;
+    $("autoKeepalive").checked = o.h_autoKeepalive;
+    $("autoFollow").checked = o.h_autoFollow;
+    $("selfDrive").checked = o.h_selfDrive;
     $("maxRounds").value = o.h_maxRounds;
   });
 }
@@ -75,14 +77,22 @@ async function ensureService() {
     if (j.platform) curPlatform = PLATFORM_MAP[j.platform] || curPlatform;
     return j; // 已在跑，直接返回（无任何副作用）
   }
-  // 未启动：经 native host 拉起 start_server.bat（浏览器扩展不能直接执行本地程序，这是唯一正规通道）
+  // 未启动：先看 native host 是否已注册。没注册时扩展无法拉起服务（浏览器安全限制），
+  // 返回 __needSetup 让界面显示"首次安装"引导（双击 setup.bat 一次）。
   appendLog("本地服务未启动，正在自动拉起…");
+  let nativeErr = null;
   try {
-    chrome.runtime.sendNativeMessage(HOST_NAME, { cmd: "start" }, () => {
-      void chrome.runtime.lastError; // host 未注册时会有 lastError，忽略（下面靠轮询判定结果）
+    nativeErr = await new Promise((resolve) => {
+      chrome.runtime.sendNativeMessage(HOST_NAME, { cmd: "start" }, () => {
+        resolve(chrome.runtime.lastError ? String(chrome.runtime.lastError.message || chrome.runtime.lastError) : null);
+      });
     });
   } catch (e) {
-    appendLog("自动拉起失败: " + e);
+    nativeErr = String(e);
+  }
+  if (nativeErr) {
+    appendLog("自动拉起不可用：native host 未注册（" + nativeErr + "），需先运行一次 setup.bat");
+    return { __needSetup: true, error: nativeErr };
   }
   for (let i = 0; i < 16; i++) { // 最多等 8 秒（Python 冷启动约 1-3 秒）
     await new Promise((r) => setTimeout(r, 500));
@@ -93,22 +103,36 @@ async function ensureService() {
       return j;
     }
   }
-  appendLog("自动启动超时：请手动运行 server/start_server.bat（或检查 native host 注册）");
+  appendLog("自动启动超时：请手动运行 server\\start_server.bat（或重新运行 setup.bat）");
   return null;
+}
+
+function showFirstRun() {
+  $("firstRun").style.display = "";
+  $("mainView").style.display = "none";
+}
+function showMain() {
+  $("firstRun").style.display = "none";
+  $("mainView").style.display = "";
 }
 
 async function ping() {
   const j = await ensureService();
-  if (j) {
+  if (j && j.ok) {
     const tools = j.tools || [];
     $("dot").className = "dot on";
     // 状态行只显示数量（18 个工具名全列会把弹窗撑乱），完整列表进 title 提示
     $("statusText").textContent = "服务正常 · " + tools.length + " 个工具就绪";
     $("statusText").title = tools.join(", ");
+    showMain();
+  } else if (j && j.__needSetup) {
+    showFirstRun();
+    $("setupMsg").textContent = "仍未检测到安装。请双击项目里的 setup.bat，看到“完成”后再点这里。";
   } else {
     $("dot").className = "dot off";
     $("statusText").textContent = "本地服务未启动";
     $("statusText").title = "";
+    showMain();
   }
   refreshPreview(); // 平台确认后刷新提示词预览
 }
@@ -147,8 +171,24 @@ chrome.storage.onChanged.addListener((ch, area) => {
   if (area === "local" && ch.log) renderLog();
 });
 
+// 首次安装引导：重试 / 复制命令
+$("retrySetup").addEventListener("click", () => {
+  $("setupMsg").textContent = "正在检查…";
+  ping();
+});
+$("copyCmd").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText("python server\\launcher\\install_host.py --autostart");
+    $("setupMsg").textContent = "已复制。请在 FreeHarness 项目目录里粘贴运行，或直接双击 setup.bat";
+  } catch (e) {
+    $("setupMsg").textContent = "复制失败，请直接双击项目里的 setup.bat";
+  }
+});
+
 bindCheck("enabled");
 bindCheck("autoSend");
+bindCheck("autoKeepalive");
+bindCheck("autoFollow");
 bindCheck("selfDrive");
 loadSettings();
 renderLog();
@@ -161,7 +201,12 @@ chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
   chrome.tabs.sendMessage(tabId, { type: "harness-ping" }, function (resp) {
     if (chrome.runtime.lastError || !resp) {
       chrome.runtime.sendMessage({ type: "harness-inject", tabId: tabId }, function (r) {
-        appendLog("已向当前页注入 FreeHarness" + (r && r.ok ? "（无需刷新页面）" : "（失败，请刷新页面）"));
+        if (r && r.needReload) {
+          showReloadNeeded("需刷新本页（残留旧脚本）");
+          appendLog("当前页残留扩展重载前的旧脚本，请按一次 F5 刷新本页");
+        } else {
+          appendLog("已向当前页注入 FreeHarness" + (r && r.ok ? "（无需刷新页面）" : "（失败，请刷新页面）"));
+        }
       });
     } else {
       appendLog("当前页 FreeHarness 运行中（适配: " + resp.adapter + "）");

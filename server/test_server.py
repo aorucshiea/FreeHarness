@@ -41,6 +41,15 @@ check("shutdown 被拦截", not r["ok"], r)
 r = execute_call({"tool": "run_command", "params": {"command": "ping -n 30 127.0.0.1", "timeout": 2}})
 check("超时终止(带部分输出)", r["ok"] and "已超时终止" in r["result"], r)
 
+# stdin 隔离：等待键盘输入的命令应立即读到 EOF 结束，而不是把超时耗满（表现为卡住）
+if os.name == "nt":
+    _t0 = time.time()
+    r = execute_call({"tool": "run_command", "params": {"command": "pause", "timeout": 20}})
+    _elapsed = time.time() - _t0
+    check("等待输入的命令快速结束(stdin EOF)", r["ok"] and _elapsed < 8, "耗时 %.1fs %s" % (_elapsed, r))
+else:
+    print("  SKIP 等待输入的命令快速结束（非 Windows，pause 不可用）")
+
 # GBK 输出解码
 r = execute_call({"tool": "run_command", "params": {"command": "echo 中文测试输出"}})
 check("中文输出不乱码", r["ok"] and "中文测试输出" in r["result"], r)
@@ -226,7 +235,7 @@ check("type_text 超长报错", not r["ok"] and "20000" in r["error"], r)
 r = execute_call({"tool": "screenshot", "params": {}})
 check("截图默认存临时目录", r["ok"] and os.path.normcase(tempfile.gettempdir()) in os.path.normcase(r.get("result", "")), r)
 
-print("== HTTP 安全（Content-Type 校验）==")
+print("== HTTP 来源校验 ==")
 import threading
 import urllib.request
 import urllib.error
@@ -239,9 +248,8 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 _base = "http://127.0.0.1:%d" % _port
 
 
-def _post(ctype, payload_bytes):
-    req = urllib.request.Request(_base + "/execute", data=payload_bytes,
-                                 headers={"Content-Type": ctype})
+def _post(headers, payload_bytes):
+    req = urllib.request.Request(_base + "/execute", data=payload_bytes, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             return resp.status, resp.read().decode("utf-8", "replace")
@@ -249,11 +257,37 @@ def _post(ctype, payload_bytes):
         return e.code, e.read().decode("utf-8", "replace")
 
 
+_OK_H = {"Content-Type": "application/json", "X-WebHarness": "1"}
 _body = json.dumps({"calls": [{"tool": "run_command", "params": {"command": "echo ct_probe"}}]}).encode("utf-8")
-code, _ = _post("text/plain", _body)
+
+code, _ = _post({"Content-Type": "text/plain", "X-WebHarness": "1"}, _body)
 check("text/plain 简单请求被拒(403)", code == 403, code)
-code, body = _post("application/json", _body)
-check("application/json 正常执行", code == 200 and "ct_probe" in body, (code, body[:100]))
+code, body = _post(_OK_H, _body)
+check("合法头(application/json + X-WebHarness)正常执行", code == 200 and "ct_probe" in body, (code, body[:100]))
+code, body = _post({"Content-Type": "application/json"}, _body)
+check("缺 X-WebHarness 头被拒(403)", code == 403, (code, body[:100]))
+code, body = _post(dict(_OK_H, Origin="https://evil.example"), _body)
+check("网页 Origin 被拒(403)", code == 403, (code, body[:100]))
+
+print("== HTTP 跨页去重 ==")
+
+
+def _post_page(page_id, conv, payload_bytes):
+    h = dict(_OK_H)
+    h["X-WebHarness-Page"] = page_id
+    h["X-WebHarness-Conv"] = conv
+    return _post(h, payload_bytes)
+
+
+_dd = json.dumps({"calls": [{"tool": "run_command", "params": {"command": "echo dedupe_case"}}]}).encode("utf-8")
+s1, d1 = _post_page("page-A", "conv-1", _dd)
+check("跨页去重-首个正常执行", s1 == 200 and not json.loads(d1).get("deduped"), (s1, d1[:100]))
+s2, d2 = _post_page("page-B", "conv-1", _dd)
+check("跨页去重-另一页拿到缓存", s2 == 200 and json.loads(d2).get("deduped") is True, (s2, d2[:100]))
+s3, d3 = _post_page("page-A", "conv-1", _dd)
+check("跨页去重-同页重跑不受影响", s3 == 200 and not json.loads(d3).get("deduped"), (s3, d3[:100]))
+s4, d4 = _post_page("page-C", "conv-2", _dd)
+check("跨页去重-不同对话不误伤", s4 == 200 and not json.loads(d4).get("deduped"), (s4, d4[:100]))
 srv.shutdown()
 
 print("\n结果: %d 通过, %d 失败" % (PASS, FAIL))

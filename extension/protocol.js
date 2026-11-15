@@ -89,19 +89,17 @@
   }
 
   function extractCalls(text) {
-    // 支持两种标签风格（大小写不敏感）：
-    //   [TOOL_CALL]{...}[/TOOL_CALL]  —— 本协议（结束标记容忍 AI 笔误 [/TOOL_CALL}）
-    //   <tool_call>{...}</tool_call>  —— 模型训练数据里的 XML 风格，DeepSeek/Qwen 常漂移过去
-    var re = /(?:\[TOOL_CALL\]|<tool_call>)[\s\S]*?(?:\[\/TOOL_CALL[\]\}]|<\/tool_call>)/gi;
+    // 容忍模型各种括号笔误/混用：
+    //   开：<TOOL_CALL>、[TOOL_CALL]、<TOOL_CALL]、[TOOL_CALL>（尖括号/方括号任意混用）
+    //   闭：[/TOOL_CALL]、[/TOOL_CALL}]、</tool_call>、</TOOL_CALL] 等
+    // 实测 DeepSeek 会输出 "<TOOL_CALL]...[/TOOL_CALL]"（开标签尖括号+方括号混用），旧正则漏抓当"无调用"。
+    var re = /[<\[][\s]*TOOL_CALL[\s]*[>\]\}][\s\S]*?[<\[][\s]*\/[\s]*TOOL_CALL[\s]*[>\]\}]/gi;
+    var openRe = /^[<\[][\s]*TOOL_CALL[\s]*[>\]\}]/i;
+    var closeRe = /[<\[][\s]*\/[\s]*TOOL_CALL[\s]*[>\]\}]$/i;
     var calls = [];
     var m;
     while ((m = re.exec(text)) !== null) {
-      var raw = m[0]
-        .replace(/^\[TOOL_CALL\]/i, "")
-        .replace(/^<tool_call>/i, "")
-        .replace(/\[\/TOOL_CALL[\]\}]$/i, "")
-        .replace(/<\/tool_call>$/i, "")
-        .trim();
+      var raw = m[0].replace(openRe, "").replace(closeRe, "").trim();
       // 容错：剥掉 AI 可能加的 markdown 围栏
       raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
       if (!raw) continue;
@@ -142,7 +140,29 @@
     return String(h);
   }
 
-  var api = { extractCalls: extractCalls, formatResults: formatResults, fingerprint: fingerprint, extractSelfPrompt: extractSelfPrompt };
+  // 结果消息的"特征段"：去掉全部空白后取中段——用于在页面文本里确认这条结果是否真的送达。
+  // 跳过前 40 字（"[TOOL_RESULT]{"results":[{"ok":true,"result":" 这段前缀每条都相同），
+  // 再取 140 字——通常已包含命令输出 / 文件路径等特异内容，足以区分不同调用。
+  function resultChunk(payload) {
+    var n = String(payload || "").replace(/\s+/g, "");
+    return n.slice(40, 180);
+  }
+
+  // 子串计数（两侧都去空白，容忍页面渲染对空白字符的差异）
+  function countOccurrences(hay, needle) {
+    if (!needle) return 0;
+    var h = String(hay || "").replace(/\s+/g, "");
+    var n = String(needle).replace(/\s+/g, "");
+    if (!n) return 0;
+    var c = 0, i = 0;
+    while ((i = h.indexOf(n, i)) !== -1) { c++; i += n.length; }
+    return c;
+  }
+
+  var api = {
+    extractCalls: extractCalls, formatResults: formatResults, fingerprint: fingerprint, extractSelfPrompt: extractSelfPrompt,
+    resultChunk: resultChunk, countOccurrences: countOccurrences
+  };
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api; // node 测试用
   }

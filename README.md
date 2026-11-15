@@ -120,7 +120,7 @@ Windows 写注册表（HKCU，无需管理员）；macOS / Linux 把 host manife
 | run_command | 执行系统命令（Windows 为 cmd，macOS/Linux 为 sh；超时杀整进程树） |
 | read_file / write_file / append_file | 文件读写（自动建目录；read_file 拒绝二进制，避免撑爆对话） |
 | list_dir | 列目录（类型 / 大小 / 修改时间） |
-| screenshot | 截图存 PNG（默认存临时目录，只保留最近 20 张） |
+| screenshot | 截图存 PNG（默认存临时目录，view_image 看图后自动删除） |
 | view_image | **让 AI 直接"看到"图片**——图片作为附件自动上传，多模态识图 |
 | open_app | 打开程序 / 文件 / 网址（系统关联方式） |
 | clipboard_read / clipboard_write | 剪贴板文本读写 |
@@ -155,9 +155,10 @@ Windows 写注册表（HKCU，无需管理员）；macOS / Linux 把 host manife
 ## 安全设计
 
 - 本地服务**只监听 `127.0.0.1`**，外网无法访问
-- 强制 `Content-Type: application/json`：浏览器"简单请求"（`text/plain` 等，不触发 CORS 预检）会被 403 拒绝，堵住恶意网页绕过 CORS 调本地服务的通道
+- 来源校验（双重）：强制 `Content-Type: application/json` + 自定义头 `X-WebHarness: 1`，并拒绝任何 http(s) 网页 Origin。自定义头与 JSON 都受 CORS 预检保护，而本服务不返回 CORS 头（预检必失败）→ 任意网页无法静默调用，只有持有权限的扩展能调用
+- 跨页去重：同一对话开在多个页面 / 浏览器时，同一条调用在窗口期内只执行一次（其余页面直接拿缓存结果），避免同步消息导致重复执行 / 重复回帖
 - 高危命令黑名单：`format`、`diskpart`、`rm -rf /`、`rd /s /q 盘根`、`shutdown` 等
-- 命令超时上限 300 秒，输出截断
+- 命令超时上限 300 秒，输出截断；stdin 隔离到空设备，等待人工输入的命令（`pause` 等）立即结束、不会挂到超时
 - 防死循环：**默认不限轮次**（可在设置里自设上限，0 = 不限制）；连续 3 轮完全相同的调用自动停止；90 秒无操作自动视为新任务重置计数
 - **页面右下角有悬浮按钮「⏸ 暂停 FreeHarness」**：觉得 AI 跑偏了，点一下立刻停止执行与回传（再点恢复）；popup 的「启用」开关状态与它同步
 - 弹窗里的**总开关**随时可关，关掉后扩展只旁观不执行

@@ -42,6 +42,24 @@
 <body>
   <h3>FreeHarness <span class="muted" style="font-weight:400;">解放网页 AI</span></h3>
 
+  <div id="firstRun" style="display:none;">
+    <div class="card card-pad" style="border-color:#e8c36a; background:#fffbea;">
+      <h4 style="color:#8a6d3b;">首次使用：需要安装一次</h4>
+      <p style="margin:6px 0;">浏览器安全限制，扩展无法自己启动本地服务。请先完成一次安装：</p>
+      <ol style="margin:6px 0 8px 18px; padding:0;">
+        <li>打开 FreeHarness 项目文件夹（含 <code>extension</code> 和 <code>server</code> 的那个）</li>
+        <li>双击运行 <b>setup.bat</b></li>
+        <li>看到“完成”后，点下面的「已安装，重试」</li>
+      </ol>
+      <div class="row" style="gap:6px;">
+        <button class="primary" id="retrySetup">已安装，重试</button>
+        <button id="copyCmd">复制命令</button>
+      </div>
+      <div class="muted" id="setupMsg" style="margin-top:6px;"></div>
+    </div>
+  </div>
+
+  <div id="mainView">
   <div class="statusbar">
     <span class="dot" id="dot"></span>
     <span id="statusText">检测本地服务…</span>
@@ -54,6 +72,8 @@
     <div class="switchrow">
       <label><input type="checkbox" id="enabled">启用</label>
       <label><input type="checkbox" id="autoSend">自动发送结果</label>
+      <label><input type="checkbox" id="autoKeepalive">后台保活标签</label>
+      <label><input type="checkbox" id="autoFollow">多页面跟随刷新</label>
       <label><input type="checkbox" id="selfDrive" title="AI 可以用 [SELF_PROMPT] 给自己下发下一步，自动连续推进（最多 10 轮）">AI 自我驱动</label>
     </div>
   </div>
@@ -93,6 +113,8 @@
   </details>
 
   <p class="muted" style="margin:8px 2px 0;">服务未启动会自动拉起；异常时刷新页面（Ctrl+F5）或重新加载扩展。</p>
+  </div>
+
   <script src="prompts.js"></script>
   <script src="popup.js"></script>
 </body>

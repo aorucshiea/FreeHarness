@@ -24,6 +24,7 @@ _KEYMAP = {
     "up": "Up", "down": "Down", "left": "Left", "right": "Right",
     "home": "Home", "end": "End", "pageup": "Prior", "pagedown": "Next",
     "ctrl": "ctrl", "alt": "alt", "shift": "shift", "win": "super",
+    "super": "super", "meta": "super",
 }
 
 
@@ -60,7 +61,7 @@ class LinuxBackend(BackendBase):
         proc = None
         timed_out = False
         try:
-            proc = subprocess.Popen(cmd, shell=True, stdout=out_f, stderr=err_f,
+            proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.DEVNULL, stdout=out_f, stderr=err_f,
                                     cwd=cwd, start_new_session=True)
             try:
                 proc.wait(timeout=timeout)

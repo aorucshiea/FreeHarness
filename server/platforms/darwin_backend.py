@@ -32,7 +32,8 @@ _SPECIAL_KEYS = {
 }
 
 _MOD_MAP = {"ctrl": "control down", "alt": "option down", "shift": "shift down",
-            "win": "command down", "cmd": "command down", "meta": "command down"}
+            "win": "command down", "cmd": "command down", "meta": "command down",
+            "super": "command down"}
 
 _ACCESS_HINT = ("（macOS 需要在 系统设置→隐私与安全性→辅助功能 中授权终端/Python 控制电脑；"
                 "首次运行 osascript 也会弹窗询问）")
@@ -67,7 +68,7 @@ class DarwinBackend(BackendBase):
         proc = None
         timed_out = False
         try:
-            proc = subprocess.Popen(cmd, shell=True, stdout=out_f, stderr=err_f,
+            proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.DEVNULL, stdout=out_f, stderr=err_f,
                                     cwd=cwd, start_new_session=True)
             try:
                 proc.wait(timeout=timeout)

@@ -6,20 +6,25 @@ FreeHarness 本地执行服务（跨平台：Windows / macOS / Linux）
 
 安全设计：
   - 仅监听 127.0.0.1，不对外网开放
-  - 响应不带 CORS 头 + 强制 Content-Type: application/json：
-    浏览器"简单请求"（text/plain 等，不触发预检）会被 403 拒绝，
-    堵住恶意网页绕过 CORS 直达本地服务的通道
+  - 来源校验（双重）：请求须带 Content-Type: application/json 且携带自定义头
+    X-WebHarness: 1，并拒绝任何 http(s) 网页 Origin。自定义头 / JSON 均受 CORS 预检
+    保护，而本服务不返回任何 CORS 头（预检必失败）→ 任意网页无法静默调用本服务，
+    只有持有 host_permissions 的扩展能调用
+  - 跨页去重：同一对话的同一条调用若刚被"另一个页面"执行过，窗口期内直接返回缓存
+    结果（标记 deduped），避免多页面 / 多浏览器同步消息导致重复执行
   - 高危命令黑名单（format / diskpart / 整盘删除等）
   - 命令超时上限、输出大小截断
 
 平台相关实现见 platforms/：win32_backend.py / darwin_backend.py / linux_backend.py
 """
 import datetime
+import hashlib
 import json
 import os
 import re
 import sys
 import tempfile
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -77,7 +82,7 @@ def log_line(msg):
         pass
 
 
-def _cleanup_old_shots(folder, keep=20):
+def _cleanup_old_shots(folder, keep=5):
     """截图目录只保留最近 keep 张，防无限堆积。"""
     try:
         import glob
@@ -148,6 +153,43 @@ def check_dangerous(cmd):
     for pat in DANGEROUS_PATTERNS:
         if re.search(pat, cmd, re.IGNORECASE):
             raise PermissionError("命令命中安全黑名单（毁灭性操作已拦截）: %s" % cmd[:100])
+
+
+# 来源校验：只放行浏览器扩展的请求（详见模块头部"安全设计"）
+REQUIRED_HEADER = "X-WebHarness"
+
+
+def check_request_source(headers):
+    """请求来源校验。放行返回 None，否则返回拒绝原因（字符串）。
+
+    - Content-Type 必须为 application/json：网页想带此头必须过 CORS 预检，而本服务
+      不返回任何 CORS 头（预检必失败），请求根本到不了服务端
+    - 必须携带自定义头 X-WebHarness: 1：自定义头同样受预检保护；表单 / sendBeacon 等
+      无预检通道在协议上无法携带它，只有持有 host_permissions 的扩展能自由设置
+    - Origin 头若存在且为 http(s) 网页来源，一律拒绝（双保险）
+    """
+    ctype = (headers.get("Content-Type") or "").split(";")[0].strip().lower()
+    if ctype != "application/json":
+        return "Content-Type 必须为 application/json（当前: %r）" % ctype
+    if headers.get(REQUIRED_HEADER) != "1":
+        return "缺少请求头 %s: 1（仅允许浏览器扩展调用）" % REQUIRED_HEADER
+    origin = (headers.get("Origin") or "").strip()
+    if origin.startswith("http://") or origin.startswith("https://"):
+        return "拒绝网页来源的请求（Origin: %s）" % origin
+    return None
+
+
+# 跨页去重：同一对话开在多个页面 / 浏览器时，同步消息会让同一条调用被多次看到。
+# 按「会话 + 调用内容」指纹去重：窗口期内若来自"另一个页面"，直接返回缓存（标记 deduped）；
+# 同页正常重跑、不同对话的同名命令都不受影响。
+DEDUPE_WINDOW = 120
+_dedupe_lock = threading.Lock()
+_recent_calls = {}
+
+
+def _calls_fingerprint(calls, conv):
+    raw = (conv or "") + "|" + json.dumps(calls, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 # ---------------- 工具实现（平台无关部分） ----------------
@@ -256,6 +298,14 @@ def tool_view_image(p):
         raise ValueError("图片 %.1f MB 超过 8MB 上限" % (size / 1048576))
     with open(path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("ascii")
+    # 自动截图（webharness 临时目录）回传后立即删除，避免在磁盘上堆积；用户自己指定路径的图片不动
+    try:
+        shot_dir = os.path.normcase(os.path.join(tempfile.gettempdir(), "webharness"))
+        if os.path.normcase(os.path.dirname(path)) == shot_dir:
+            os.remove(path)
+            log_line("已删除临时截图: %s" % path)
+    except OSError:
+        pass
     return json.dumps({
         "__image__": True, "mime": mime,
         "name": os.path.basename(path), "size": size, "data": b64,
@@ -458,16 +508,30 @@ class Handler(BaseHTTPRequestHandler):
             self._json(404, {"ok": False, "error": "not found"})
 
     def do_POST(self):
+        if self.path == "/register":
+            deny = check_request_source(self.headers)
+            if deny:
+                log_line("已拦截来源校验失败的 /register: %s" % deny)
+                self._json(403, {"ok": False, "error": "来源校验失败：%s" % deny})
+                return
+            try:
+                n = int(self.headers.get("Content-Length", "0"))
+                body = json.loads(self.rfile.read(n).decode("utf-8"))
+            except Exception as e:
+                self._json(400, {"ok": False, "error": "请求体解析失败: %s" % e})
+                return
+            ext_id = (body or {}).get("extId")
+            ok = _register_extension_id(ext_id)
+            log_line("扩展自注册: %s -> %s" % (ext_id, "OK" if ok else "FAIL"))
+            self._json(200, {"ok": ok})
+            return
         if self.path != "/execute":
             self._json(404, {"ok": False, "error": "not found"})
             return
-        # 安全：强制 application/json。
-        # 浏览器"简单请求"（text/plain 等）不触发 CORS 预检、可直达本服务，恶意网页
-        # 正是借它绕过"无 CORS 头"的防护；而 Content-Type 为 application/json 会触发
-        # 预检（本服务不回 CORS 头 → 预检失败），扩展的 fetch 不受此限。
-        ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-        if ctype != "application/json":
-            self._json(403, {"ok": False, "error": "Content-Type 必须为 application/json"})
+        deny = check_request_source(self.headers)
+        if deny:
+            log_line("已拦截来源校验失败的请求: %s" % deny)
+            self._json(403, {"ok": False, "error": "来源校验失败：%s" % deny})
             return
         try:
             n = int(self.headers.get("Content-Length", "0"))
@@ -484,6 +548,20 @@ class Handler(BaseHTTPRequestHandler):
         if len(calls) > MAX_CALLS_PER_REQ:
             self._json(400, {"ok": False, "error": "单次最多 %d 个调用" % MAX_CALLS_PER_REQ})
             return
+        client = (self.headers.get("X-WebHarness-Page") or "").strip() or "unknown"
+        conv = (self.headers.get("X-WebHarness-Conv") or "").strip()
+        fp = _calls_fingerprint(calls, conv)
+        now_t = time.time()
+        with _dedupe_lock:
+            for k in [k for k, v in _recent_calls.items() if now_t - v[1] > DEDUPE_WINDOW * 3]:
+                _recent_calls.pop(k, None)
+            hit = _recent_calls.get(fp)
+            if hit and hit[0] != client and now_t - hit[1] < DEDUPE_WINDOW:
+                cached = dict(hit[2])
+                cached["deduped"] = True
+                log_line("跨页去重: 同一对话的相同调用刚由 %s 执行，返回缓存" % hit[0])
+                self._json(200, cached)
+                return
         results = []
         for c in calls:
             r = execute_call(c)
@@ -491,7 +569,10 @@ class Handler(BaseHTTPRequestHandler):
             tool = (c or {}).get("tool", "?")
             preview = (r.get("result") or r.get("error") or "")[:60].replace("\n", " ")
             log_line("%-14s %s | %s" % (tool, "OK " if r["ok"] else "ERR", preview))
-        self._json(200, {"ok": all(r["ok"] for r in results), "results": results})
+        resp = {"ok": all(r["ok"] for r in results), "results": results}
+        with _dedupe_lock:
+            _recent_calls[fp] = (client, time.time(), resp)
+        self._json(200, resp)
 
 
 def _configure_stdout():
@@ -521,8 +602,54 @@ def _configure_stdout():
             pass
 
 
+def _load_install_host():
+    try:
+        import importlib.util
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "launcher", "install_host.py")
+        if not os.path.isfile(p):
+            return None
+        spec = importlib.util.spec_from_file_location("freeharness_install_host", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None
+
+
+def _auto_register_native_host():
+    """启动时自动检测已加载的扩展并注册 Native Messaging host（尽力而为，失败不影响服务）。"""
+    mod = _load_install_host()
+    if mod:
+        try:
+            mod.auto_detect_and_install(quiet=True)
+        except Exception:
+            pass
+
+
+def _register_extension_id(ext_id):
+    """把扩展 ID 加入 Native Messaging 允许列表（扩展装好/首次联系服务时自注册）。"""
+    ext_id = str(ext_id or "").strip()
+    if not re.fullmatch(r"[a-p]{32}", ext_id):
+        return False
+    manifest_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "launcher", "com.webharness.launcher.json")
+    try:
+        with open(manifest_path, encoding="utf-8") as f:
+            if ("chrome-extension://%s/" % ext_id) in (json.load(f).get("allowed_origins") or []):
+                return True
+    except Exception:
+        pass
+    mod = _load_install_host()
+    if not mod:
+        return False
+    try:
+        return bool(mod.install([ext_id], quiet=True, detect=False))
+    except Exception:
+        return False
+
+
 def main():
     _configure_stdout()
+    _auto_register_native_host()
     tools = sorted(TOOLS)
     print("=" * 62)
     print(" FreeHarness 本地执行服务  v0.9.2  (%s)" % platform_name())
